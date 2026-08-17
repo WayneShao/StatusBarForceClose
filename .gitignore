@@ -3,4 +3,9 @@
 local.properties
 **/build/
 *.iml
-
+*.jks
+*.keystore
+*.p12
+*.pem
+*.properties.local
+secrets/

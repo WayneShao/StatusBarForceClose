@@ -1,0 +1,60 @@
+name: Compatibility or behavior report
+description: Report a failed Hook, missed double tap, wrong target, or force-stop failure.
+title: "[Bug] "
+labels:
+  - bug
+body:
+  - type: markdown
+    attributes:
+      value: Please use a debug build and remove unrelated personal data from logs.
+  - type: input
+    id: device
+    attributes:
+      label: Device and codename
+      placeholder: Xiaomi MODEL / CODENAME
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: HyperOS, Android, and SDK versions
+      placeholder: OS4.x / Android 17 / SDK 37
+    validations:
+      required: true
+  - type: input
+    id: systemui
+    attributes:
+      label: SystemUI version
+      description: Include package versionCode and versionName when available.
+    validations:
+      required: true
+  - type: input
+    id: framework
+    attributes:
+      label: Root and LSPosed implementation
+      placeholder: KernelSU version, LSPosed version, API level
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps and visible result
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Debug log
+      description: Include one complete requestId from double_tap_detected through request_released.
+      render: text
+    validations:
+      required: true
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Checks
+      options:
+        - label: The module scope contains only com.android.systemui.
+          required: true
+        - label: I reproduced this with the latest debug artifact for the reported commit.
+          required: true
