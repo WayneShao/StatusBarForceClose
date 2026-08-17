@@ -36,3 +36,11 @@ does not attempt cross-profile or managed-profile force-stop operations.
 Because the module code runs inside SystemUI, a root manager may attribute the
 `su` request to SystemUI. Binder fallback avoids making root approval a hard
 requirement.
+
+## Debug Diagnostics
+
+Debug builds log the complete decision path with stable `event=` names to both
+the libxposed log and Android logcat under the `StatusBarForceClose` tag. No
+individual touch events are logged; only a recognized double tap and its
+resulting request are recorded. The build-time `DIAGNOSTICS_ENABLED` constant
+disables the diagnostic sink in release builds.

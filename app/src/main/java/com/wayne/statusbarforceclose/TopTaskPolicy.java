@@ -16,13 +16,19 @@ final class TopTaskPolicy {
     }
 
     static boolean canForceStop(String packageName, String activeInputMethodPackage) {
+        return rejectionReason(packageName, activeInputMethodPackage) == null;
+    }
+
+    static String rejectionReason(String packageName, String activeInputMethodPackage) {
         if (packageName == null || packageName.isBlank()) {
-            return false;
+            return "missing-package";
         }
         if (PROTECTED_PACKAGES.contains(packageName)) {
-            return false;
+            return "protected-package";
         }
-        return activeInputMethodPackage == null || !packageName.equals(activeInputMethodPackage);
+        if (packageName.equals(activeInputMethodPackage)) {
+            return "active-input-method";
+        }
+        return null;
     }
 }
-

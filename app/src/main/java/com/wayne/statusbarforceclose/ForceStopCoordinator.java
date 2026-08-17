@@ -9,10 +9,12 @@ final class ForceStopCoordinator {
         this.binderMethod = binderMethod;
     }
 
-    boolean forceStop(String packageName, int userId) {
+    ForceStopResult forceStop(String packageName, int userId) {
         if (rootMethod.forceStop(packageName, userId)) {
-            return true;
+            return ForceStopResult.ROOT;
         }
-        return binderMethod.forceStop(packageName, userId);
+        return binderMethod.forceStop(packageName, userId)
+                ? ForceStopResult.BINDER
+                : ForceStopResult.FAILED;
     }
 }

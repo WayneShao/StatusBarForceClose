@@ -1,7 +1,6 @@
 package com.wayne.statusbarforceclose;
 
-import static org.junit.Assert.assertFalse;
-import static org.junit.Assert.assertTrue;
+import static org.junit.Assert.assertEquals;
 
 import java.util.concurrent.atomic.AtomicInteger;
 import org.junit.Test;
@@ -17,8 +16,10 @@ public class ForceStopCoordinatorTest {
                     return true;
                 });
 
-        assertTrue(coordinator.forceStop("com.example.reader", 0));
-        assertTrue(binderCalls.get() == 0);
+        assertEquals(
+                ForceStopResult.ROOT,
+                coordinator.forceStop("com.example.reader", 0));
+        assertEquals(0, binderCalls.get());
     }
 
     @Test
@@ -31,8 +32,10 @@ public class ForceStopCoordinatorTest {
                     return true;
                 });
 
-        assertTrue(coordinator.forceStop("com.example.reader", 10));
-        assertTrue(binderCalls.get() == 1);
+        assertEquals(
+                ForceStopResult.BINDER,
+                coordinator.forceStop("com.example.reader", 10));
+        assertEquals(1, binderCalls.get());
     }
 
     @Test
@@ -41,6 +44,8 @@ public class ForceStopCoordinatorTest {
                 (packageName, userId) -> false,
                 (packageName, userId) -> false);
 
-        assertFalse(coordinator.forceStop("com.example.reader", 0));
+        assertEquals(
+                ForceStopResult.FAILED,
+                coordinator.forceStop("com.example.reader", 0));
     }
 }

@@ -18,6 +18,19 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    buildFeatures {
+        buildConfig = true
+    }
+
+    buildTypes {
+        debug {
+            buildConfigField("boolean", "DIAGNOSTICS_ENABLED", "true")
+        }
+        release {
+            buildConfigField("boolean", "DIAGNOSTICS_ENABLED", "false")
+        }
+    }
 }
 
 dependencies {

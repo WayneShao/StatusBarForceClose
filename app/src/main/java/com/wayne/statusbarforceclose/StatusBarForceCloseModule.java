@@ -17,6 +17,7 @@ import java.util.WeakHashMap;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
+import java.util.concurrent.atomic.AtomicLong;
 
 import io.github.libxposed.api.XposedModule;
 
@@ -28,15 +29,24 @@ public final class StatusBarForceCloseModule extends XposedModule {
     private final Map<View, DoubleTapDetector> detectors =
             Collections.synchronizedMap(new WeakHashMap<>());
     private final AtomicBoolean forceStopInFlight = new AtomicBoolean();
+    private final AtomicLong requestCounter = new AtomicLong();
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private final ExecutorService worker = Executors.newSingleThreadExecutor(runnable -> {
         Thread thread = new Thread(runnable, TAG);
         thread.setDaemon(true);
         return thread;
     });
+    private final DiagnosticLogger diagnosticLogger = this::report;
     private final ForceStopCoordinator coordinator = new ForceStopCoordinator(
-            new SuForceStopMethod(),
-            new BinderForceStopMethod());
+            new SuForceStopMethod(diagnosticLogger),
+            new BinderForceStopMethod(diagnosticLogger));
+
+    @Override
+    public void onModuleLoaded(ModuleLoadedParam param) {
+        report(Log.INFO, "module_loaded", "process=" + param.getProcessName()
+                + " api=" + getApiVersion() + " framework=" + getFrameworkName()
+                + " frameworkVersion=" + getFrameworkVersion(), null);
+    }
 
     @Override
     public void onPackageReady(PackageReadyParam param) {
@@ -45,6 +55,7 @@ public final class StatusBarForceCloseModule extends XposedModule {
         }
 
         try {
+            report(Log.INFO, "hook_install_start", "package=" + param.getPackageName(), null);
             Method touchMethod = findTouchMethod(param.getClassLoader());
             hook(touchMethod)
                     .setId("status-bar-force-close:touch-observer")
@@ -53,10 +64,12 @@ public final class StatusBarForceCloseModule extends XposedModule {
                         observeTouch(chain.getThisObject(), chain.getArg(0));
                         return result;
                     });
-            log(Log.INFO, TAG, "Hooked " + touchMethod.getDeclaringClass().getName()
-                    + "." + touchMethod.getName());
+            report(Log.INFO, "hook_installed", "method="
+                    + touchMethod.getDeclaringClass().getName() + "."
+                    + touchMethod.getName(), null);
         } catch (Throwable throwable) {
-            log(Log.ERROR, TAG, "Failed to install status-bar touch hook", throwable);
+            report(Log.ERROR, "hook_install_failed", "package=" + param.getPackageName(),
+                    throwable);
         }
     }
 
@@ -88,6 +101,7 @@ public final class StatusBarForceCloseModule extends XposedModule {
                 event.getRawY(),
                 event.getEventTime());
         if (doubleTap) {
+            diagnosticLogger.info("double_tap_detected", "view=" + view.getClass().getName());
             requestForceStop(view.getContext());
         }
     }
@@ -110,35 +124,80 @@ public final class StatusBarForceCloseModule extends XposedModule {
     }
 
     private void requestForceStop(Context context) {
+        long requestId = requestCounter.incrementAndGet();
         if (!forceStopInFlight.compareAndSet(false, true)) {
+            diagnosticLogger.warn("request_ignored", "requestId=" + requestId
+                    + " reason=force-stop-in-flight");
             return;
         }
 
+        diagnosticLogger.info("request_queued", "requestId=" + requestId);
         Context applicationContext = context.getApplicationContext();
         worker.execute(() -> {
             try {
                 TopTask task = TopTaskResolver.resolve(
-                        applicationContext == null ? context : applicationContext);
+                        applicationContext == null ? context : applicationContext,
+                        diagnosticLogger);
                 if (task == null) {
-                    log(Log.INFO, TAG, "No eligible foreground application");
+                    diagnosticLogger.info("request_finished", "requestId=" + requestId
+                            + " result=no-eligible-target");
                     return;
                 }
 
-                boolean stopped = coordinator.forceStop(task.packageName(), task.userId());
-                log(stopped ? Log.INFO : Log.WARN, TAG,
-                        (stopped ? "Force-stopped " : "Failed to force-stop ")
-                                + task.packageName() + " for user " + task.userId());
-                if (stopped) {
-                    mainHandler.post(() -> Toast.makeText(
-                            context,
-                            ForceStopMessage.success(task.applicationLabel(), task.packageName()),
-                            Toast.LENGTH_SHORT).show());
+                diagnosticLogger.info("force_stop_start", "requestId=" + requestId
+                        + " package=" + task.packageName() + " user=" + task.userId());
+                ForceStopResult result = coordinator.forceStop(
+                        task.packageName(), task.userId());
+                diagnosticLogger.log(
+                        result == ForceStopResult.FAILED ? Log.WARN : Log.INFO,
+                        "force_stop_result",
+                        "requestId=" + requestId + " package=" + task.packageName()
+                                + " user=" + task.userId() + " result=" + result,
+                        null);
+                if (result != ForceStopResult.FAILED) {
+                    boolean accepted = mainHandler.post(() -> showSuccessToast(
+                            context, task, requestId));
+                    diagnosticLogger.log(
+                            accepted ? Log.INFO : Log.WARN,
+                            "toast_queued",
+                            "requestId=" + requestId + " package=" + task.packageName()
+                                    + " accepted=" + accepted,
+                            null);
                 }
             } catch (Throwable throwable) {
-                log(Log.ERROR, TAG, "Foreground application lookup failed", throwable);
+                diagnosticLogger.error("request_exception", "requestId=" + requestId,
+                        throwable);
             } finally {
                 forceStopInFlight.set(false);
+                diagnosticLogger.info("request_released", "requestId=" + requestId);
             }
         });
+    }
+
+    private void showSuccessToast(Context context, TopTask task, long requestId) {
+        try {
+            String message = ForceStopMessage.success(
+                    task.applicationLabel(), task.packageName());
+            Toast.makeText(context, message, Toast.LENGTH_SHORT).show();
+            diagnosticLogger.info("toast_shown", "requestId=" + requestId + " package="
+                    + task.packageName() + " message=" + message);
+        } catch (Throwable throwable) {
+            diagnosticLogger.error("toast_exception", "requestId=" + requestId
+                    + " package=" + task.packageName(), throwable);
+        }
+    }
+
+    private void report(int priority, String event, String details, Throwable throwable) {
+        if (!BuildConfig.DIAGNOSTICS_ENABLED) {
+            return;
+        }
+        String message = "event=" + event + " " + details;
+        if (throwable == null) {
+            log(priority, TAG, message);
+            Log.println(priority, TAG, message);
+        } else {
+            log(priority, TAG, message, throwable);
+            Log.println(priority, TAG, message + "\n" + Log.getStackTraceString(throwable));
+        }
     }
 }

@@ -25,6 +25,15 @@ $env:ANDROID_HOME='D:\Backup\Desktop\HyperOS4\tools\android-sdk'
 
 The local test artifact is `dist/StatusBarForceClose-v0.1.0-debug.apk`. It uses
 the local Android debug certificate and is intended for the first device test.
+All structured diagnostics are guarded by the build-time
+`BuildConfig.DIAGNOSTICS_ENABLED` constant (`true` for debug, `false` for
+release). Release builds emit none of these logs.
+
+Debug diagnostics are available in both the LSPosed module log and logcat:
+
+```powershell
+adb -s SERIAL logcat -v threadtime -s StatusBarForceClose
+```
 
 ## Enable
 
