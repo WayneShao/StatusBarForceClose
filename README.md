@@ -97,7 +97,7 @@ $env:ANDROID_KEY_PASSWORD='KEY_PASSWORD'
 ## CI 与发布
 
 - `.github/workflows/ci.yml`：对 `main` 的 push 和 pull request 执行单元测试、lint 和 debug 构建，并上传短期 debug artifact。
-- `.github/workflows/release.yml`：手动触发时构建、签名、验证并上传 Actions artifact，不创建 GitHub Release；推送格式为 `versionCode-versionName`（例如 `1-0.1.0`）的 tag 时才发布正式 Release。
+- `.github/workflows/release.yml`：手动触发时构建、签名、验证并上传 Actions artifact，不创建 GitHub Release；推送格式为 `versionCode-versionName`（例如 `1-0.1.0`）的 tag 时才发布正式 Release，并优先采用 `.github/release-notes/VERSION_NAME.md` 的完整版本说明。
 - 发布工作流验证 APK 签名、包名、版本、SDK 级别、无组件清单、API102 元数据、唯一静态作用域和入口类，并生成 `SHA256SUMS`。
 
 仓库需要配置四个 Actions Secret：
@@ -113,6 +113,7 @@ $env:ANDROID_KEY_PASSWORD='KEY_PASSWORD'
 StatusBarForceClose/
 |-- .github/
 |   |-- ISSUE_TEMPLATE/bug_report.yml
+|   |-- release-notes/0.1.0.md
 |   `-- workflows/
 |       |-- ci.yml
 |       `-- release.yml
