@@ -87,18 +87,19 @@ jobs:
           signature_report="$("$apksigner" verify --verbose --print-certs "$input")"
           printf '%s\n' "$signature_report"
           expected_signer="$(tr -d '[:space:]' < SIGNING_CERT_SHA256 | tr '[:upper:]' '[:lower:]')"
-          actual_signer="$(sed -n 's/^.*certificate SHA-256 digest: //p' <<<"$signature_report" | head -n1 | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
+          actual_signer="$(sed -n 's/^.*certificate SHA-256 digest: //p' <<<"$signature_report" | tr -d '[:space:]' | tr '[:upper:]' '[:lower:]')"
           [[ -n "$actual_signer" && "$actual_signer" == "$expected_signer" ]] || {
             echo "::error::Release signer does not match SIGNING_CERT_SHA256"; exit 1;
           }
 
-          package_line="$($aapt2 dump badging "$input" | sed -n '1p')"
+          badging="$($aapt2 dump badging "$input")"
+          package_line="$(sed -n '1p' <<<"$badging")"
           package_name="$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" <<<"$package_line")"
           version_code="$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" <<<"$package_line")"
           version_name="$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" <<<"$package_line")"
-          sdk_line="$($aapt2 dump badging "$input" | grep -m1 '^sdkVersion:')"
-          target_sdk_line="$($aapt2 dump badging "$input" | grep -m1 '^targetSdkVersion:')"
-          application_line="$($aapt2 dump badging "$input" | grep -m1 '^application:')"
+          sdk_line="$(sed -n '/^sdkVersion:/{p;q;}' <<<"$badging")"
+          target_sdk_line="$(sed -n '/^targetSdkVersion:/{p;q;}' <<<"$badging")"
+          application_line="$(sed -n '/^application:/{p;q;}' <<<"$badging")"
           [[ "$package_name" == 'com.wayne.statusbarforceclose' ]] || {
             echo "::error::Unexpected application package"; exit 1;
           }
@@ -117,7 +118,8 @@ jobs:
           if grep -Eq '^[[:space:]]+E: uses-permission( |$)' <<<"$manifest"; then
             echo "::error::APK unexpectedly requests an Android permission"; exit 1
           fi
-          if unzip -Z1 "$input" | grep -Eq '^lib/'; then
+          archive_entries="$(unzip -Z1 "$input")"
+          if grep -Eq '^lib/' <<<"$archive_entries"; then
             echo "::error::APK unexpectedly contains native libraries"; exit 1
           fi
 
@@ -136,7 +138,7 @@ jobs:
           [[ "$actual_entry" == "$expected_entry" ]] || {
             echo "::error::Unexpected libxposed entry point"; exit 1;
           }
-          if unzip -Z1 "$input" | grep -Fxq 'assets/xposed_init'; then
+          if grep -Fxq 'assets/xposed_init' <<<"$archive_entries"; then
             echo "::error::APK contains the legacy Xposed entry point"; exit 1
           fi
 
