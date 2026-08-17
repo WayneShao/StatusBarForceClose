@@ -75,8 +75,10 @@ JVM tests cover:
 The change is developed test-first. After unit tests pass, the full local gate
 is `clean`, `testDebugUnitTest`, `lintDebug`, `assembleDebug`, and
 `assembleRelease`. Versioning advances to `versionCode = 2` and
-`versionName = 0.1.1`, but no APK is installed or published until device tests
-separately prove user 0 and user 999 behavior.
+`versionName = 0.1.1`. Per the subsequent release instruction, the source
+Release may be published after local review, the full build gate, and cloud CI
+all pass. Publishing does not count as new device evidence, and no APK is
+installed on the phone as part of this release operation.
 
 ## Device Acceptance Criteria
 

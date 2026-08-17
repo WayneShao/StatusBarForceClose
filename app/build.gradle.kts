@@ -23,8 +23,8 @@ android {
         applicationId = "com.wayne.statusbarforceclose"
         minSdk = 37
         targetSdk = 37
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.1.1"
     }
 
     compileOptions {

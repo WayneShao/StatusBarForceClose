@@ -113,7 +113,9 @@ $env:ANDROID_KEY_PASSWORD='KEY_PASSWORD'
 StatusBarForceClose/
 |-- .github/
 |   |-- ISSUE_TEMPLATE/bug_report.yml
-|   |-- release-notes/0.1.0.md
+|   |-- release-notes/
+|   |   |-- 0.1.0.md
+|   |   `-- 0.1.1.md
 |   `-- workflows/
 |       |-- ci.yml
 |       `-- release.yml
@@ -129,7 +131,8 @@ StatusBarForceClose/
 |   |-- design.md
 |   |-- device-evidence.md
 |   |-- implementation-plan.md
-|   `-- release-validation.md
+|   |-- release-validation.md
+|   `-- superpowers/
 |-- LICENSE
 |-- SCOPE
 |-- SIGNING_CERT_SHA256
@@ -141,7 +144,7 @@ StatusBarForceClose/
 
 - 第一版只针对上述实机环境，不为尚未验证的旧 Android 或其他 HyperOS 4 构建宣称兼容。
 - 当前 Hook 点依赖 HyperOS 4 SystemUI 的类层级；类或方法不存在时模块记录失败并停止，不尝试模糊匹配未知实现。
-- 模块只处理当前用户的前台普通应用，不跨用户猜测目标。
+- 模块读取实际前台任务的 Android 用户 ID，可区分主用户与 HyperOS 双开用户 `999`；读取失败时停止操作，不按包名或固定用户猜测目标。
 - Root 路径是否可用取决于设备 SELinux 策略；Binder 回退是当前实机上的实际成功路径。
 - 双击发生在通知下拉、锁屏或受保护系统目标上时，模块可能选择不执行，以避免关闭关键系统界面。
 

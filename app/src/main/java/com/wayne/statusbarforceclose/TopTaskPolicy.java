@@ -3,13 +3,10 @@ package com.wayne.statusbarforceclose;
 import java.util.Set;
 
 final class TopTaskPolicy {
-    static final String MODULE_PACKAGE = "com.wayne.statusbarforceclose";
-
     private static final Set<String> PROTECTED_PACKAGES = Set.of(
         "android",
         "com.android.systemui",
-        "com.miui.home",
-        MODULE_PACKAGE
+        "com.miui.home"
     );
 
     private TopTaskPolicy() {

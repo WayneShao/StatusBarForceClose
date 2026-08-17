@@ -17,7 +17,12 @@ public class TopTaskPolicyTest {
         assertFalse(TopTaskPolicy.canForceStop("android", null));
         assertFalse(TopTaskPolicy.canForceStop("com.android.systemui", null));
         assertFalse(TopTaskPolicy.canForceStop("com.miui.home", null));
-        assertFalse(TopTaskPolicy.canForceStop("com.wayne.statusbarforceclose", null));
+    }
+
+    @Test
+    public void permitsSettingsAndModulePackage() {
+        assertTrue(TopTaskPolicy.canForceStop("com.android.settings", null));
+        assertTrue(TopTaskPolicy.canForceStop("com.wayne.statusbarforceclose", null));
     }
 
     @Test
@@ -25,4 +30,3 @@ public class TopTaskPolicyTest {
         assertFalse(TopTaskPolicy.canForceStop("com.example.keyboard", "com.example.keyboard"));
     }
 }
-

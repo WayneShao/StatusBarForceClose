@@ -5,7 +5,6 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.content.pm.ApplicationInfo;
 import android.content.pm.PackageManager;
-import android.os.Process;
 import android.provider.Settings;
 
 import java.util.List;
@@ -45,14 +44,16 @@ final class TopTaskResolver {
             return null;
         }
 
-        int userId = AndroidUserIds.fromUid(Process.myUid());
+        int userId = TaskUserIdResolver.resolve(task);
         if (userId < 0) {
-            logger.warn("target_lookup_empty", "reason=invalid-user uid=" + Process.myUid());
+            logger.warn("target_lookup_empty", "reason=task-user-unavailable taskId="
+                    + task.taskId + " package=" + packageName + " taskClass="
+                    + task.getClass().getName());
             return null;
         }
         String applicationLabel = getApplicationLabel(context, packageName);
-        logger.info("target_resolved", "package=" + packageName + " user=" + userId
-                + " label=" + sanitize(applicationLabel));
+        logger.info("target_resolved", "taskId=" + task.taskId + " package=" + packageName
+                + " user=" + userId + " label=" + sanitize(applicationLabel));
         return new TopTask(packageName, userId, applicationLabel);
     }
 
