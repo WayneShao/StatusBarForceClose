@@ -100,16 +100,23 @@ jobs:
           sdk_line="$(sed -n '/^sdkVersion:/{p;q;}' <<<"$badging")"
           target_sdk_line="$(sed -n '/^targetSdkVersion:/{p;q;}' <<<"$badging")"
           application_line="$(sed -n '/^application:/{p;q;}' <<<"$badging")"
+          manifest="$($aapt2 dump xmltree "$input" --file AndroidManifest.xml)"
+          min_sdk="$(sed -n 's/^.*:minSdkVersion([^)]*)=\([0-9][0-9]*\).*$/\1/p' <<<"$manifest")"
+          target_sdk="$(sed -n 's/^.*:targetSdkVersion([^)]*)=\([0-9][0-9]*\).*$/\1/p' <<<"$manifest")"
+          printf 'SDK badging: %s | %s\n' "$sdk_line" "$target_sdk_line"
           [[ "$package_name" == 'com.wayne.statusbarforceclose' ]] || {
             echo "::error::Unexpected application package"; exit 1;
           }
-          [[ "$sdk_line" == "sdkVersion:'37'" ]] || { echo "::error::Unexpected minSdk"; exit 1; }
-          [[ "$target_sdk_line" == "targetSdkVersion:'37'" ]] || { echo "::error::Unexpected targetSdk"; exit 1; }
+          [[ "$min_sdk" == '37' ]] || {
+            echo "::error::Unexpected minSdk value '$min_sdk'"; exit 1;
+          }
+          [[ "$target_sdk" == '37' ]] || {
+            echo "::error::Unexpected targetSdk value '$target_sdk'"; exit 1;
+          }
           [[ "$application_line" == *" icon=''"* ]] || {
             echo "::error::APK unexpectedly declares an application icon"; exit 1;
           }
 
-          manifest="$($aapt2 dump xmltree "$input" --file AndroidManifest.xml)"
           for component in activity service receiver provider; do
             if grep -Eq "^[[:space:]]+E: ${component}( |$)" <<<"$manifest"; then
               echo "::error::APK unexpectedly declares an Android $component"; exit 1
