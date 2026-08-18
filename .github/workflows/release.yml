@@ -71,7 +71,12 @@ jobs:
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
-        run: ./gradlew clean testDebugUnitTest lintDebug assembleRelease
+        run: |
+          args=(clean testDebugUnitTest lintDebug assembleRelease)
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            args+=(-PdiagnosticsEnabled=true)
+          fi
+          ./gradlew "${args[@]}"
 
       - name: Validate and stage APK
         id: package
@@ -152,7 +157,11 @@ jobs:
           dex_dir="$RUNNER_TEMP/statusbar-force-close-dex"
           mkdir -p "$dex_dir"
           unzip -qq "$input" 'classes*.dex' -d "$dex_dir"
-          if grep -aFRq -e 'event=' -e 'double_tap_detected' "$dex_dir"; then
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            if ! grep -aFRq -e 'event=' -e 'double_tap_detected' "$dex_dir"; then
+              echo "::error::Signed test APK is missing diagnostic messages"; exit 1
+            fi
+          elif grep -aFRq -e 'event=' -e 'double_tap_detected' "$dex_dir"; then
             echo "::error::Release APK still contains debug diagnostic messages"; exit 1
           fi
 

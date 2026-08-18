@@ -8,6 +8,10 @@ val releaseKeystorePath = providers.environmentVariable("ANDROID_KEYSTORE_PATH")
 val releaseKeyAlias = providers.environmentVariable("ANDROID_KEY_ALIAS").orNull
 val releaseStorePassword = providers.environmentVariable("ANDROID_KEYSTORE_PASSWORD").orNull
 val releaseKeyPassword = providers.environmentVariable("ANDROID_KEY_PASSWORD").orNull
+val diagnosticsEnabled = providers.gradleProperty("diagnosticsEnabled")
+    .orNull
+    ?.toBooleanStrictOrNull()
+    ?: false
 val hasReleaseSigning = listOf(
     releaseKeystorePath,
     releaseKeyAlias,
@@ -52,7 +56,7 @@ android {
             buildConfigField("boolean", "DIAGNOSTICS_ENABLED", "true")
         }
         release {
-            buildConfigField("boolean", "DIAGNOSTICS_ENABLED", "false")
+            buildConfigField("boolean", "DIAGNOSTICS_ENABLED", diagnosticsEnabled.toString())
             isMinifyEnabled = true
             isShrinkResources = true
             if (hasReleaseSigning) {
