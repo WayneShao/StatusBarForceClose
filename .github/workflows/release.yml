@@ -107,7 +107,7 @@ jobs:
           [[ "$package_name" == 'com.wayne.statusbarforceclose' ]] || {
             echo "::error::Unexpected application package"; exit 1;
           }
-          [[ "$min_sdk" == '37' ]] || {
+          [[ "$min_sdk" == '36' ]] || {
             echo "::error::Unexpected minSdk value '$min_sdk'"; exit 1;
           }
           [[ "$target_sdk" == '37' ]] || {

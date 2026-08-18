@@ -24,6 +24,12 @@ import io.github.libxposed.api.XposedModule;
 public final class StatusBarForceCloseModule extends XposedModule {
     private static final String TAG = "StatusBarForceClose";
     private static final String SYSTEM_UI = "com.android.systemui";
+    private static final String PHONE_STATUS_BAR_VIEW =
+            "com.android.systemui.statusbar.phone.PhoneStatusBarView";
+    private static final String MIUI_STATUS_BAR_VIEW =
+            "com.android.systemui.statusbar.phone.MiuiPhoneStatusBarView";
+    private static final String OPLUS_STATUS_BAR_VIEW_EXTENSION =
+            "com.oplus.systemui.statusbar.phone.PhoneStatusBarViewExImpl";
     private static final long MAX_TAP_DURATION_MS = 250L;
 
     private final Map<View, DoubleTapDetector> detectors =
@@ -56,17 +62,7 @@ public final class StatusBarForceCloseModule extends XposedModule {
 
         try {
             report(Log.INFO, "hook_install_start", "package=" + param.getPackageName(), null);
-            Method touchMethod = findTouchMethod(param.getClassLoader());
-            hook(touchMethod)
-                    .setId("status-bar-force-close:touch-observer")
-                    .intercept(chain -> {
-                        Object result = chain.proceed();
-                        observeTouch(chain.getThisObject(), chain.getArg(0));
-                        return result;
-                    });
-            report(Log.INFO, "hook_installed", "method="
-                    + touchMethod.getDeclaringClass().getName() + "."
-                    + touchMethod.getName(), null);
+            installTouchHook(param.getClassLoader());
         } catch (Throwable throwable) {
             report(Log.ERROR, "hook_install_failed", "package=" + param.getPackageName(),
                     throwable);
@@ -74,19 +70,100 @@ public final class StatusBarForceCloseModule extends XposedModule {
     }
 
     @SuppressLint("PrivateApi")
-    private Method findTouchMethod(ClassLoader classLoader) throws ReflectiveOperationException {
-        Class<?> miuiStatusBar = Class.forName(
-                "com.android.systemui.statusbar.phone.MiuiPhoneStatusBarView",
-                false,
+    private void installTouchHook(ClassLoader classLoader) throws ReflectiveOperationException {
+        Class<?> phoneStatusBar = findClassIfPresent(PHONE_STATUS_BAR_VIEW, classLoader);
+        Class<?> miuiStatusBar = findClassIfPresent(MIUI_STATUS_BAR_VIEW, classLoader);
+        Class<?> oplusExtension = findClassIfPresent(
+                OPLUS_STATUS_BAR_VIEW_EXTENSION,
                 classLoader);
-        Class<?> phoneStatusBar = Class.forName(
-                "com.android.systemui.statusbar.phone.PhoneStatusBarView",
-                false,
-                classLoader);
-        if (!phoneStatusBar.isAssignableFrom(miuiStatusBar)) {
-            throw new IllegalStateException("Unexpected status-bar class hierarchy");
+        boolean miuiHierarchyCompatible = phoneStatusBar != null
+                && miuiStatusBar != null
+                && phoneStatusBar.isAssignableFrom(miuiStatusBar);
+        StatusBarHookStrategySelector.Strategy strategy =
+                StatusBarHookStrategySelector.select(
+                        phoneStatusBar != null,
+                        miuiHierarchyCompatible,
+                        oplusExtension != null);
+        report(Log.INFO, "hook_strategy_selected", "strategy=" + strategy
+                + " phone=" + className(phoneStatusBar)
+                + " miui=" + className(miuiStatusBar)
+                + " oplus=" + className(oplusExtension), null);
+
+        if (strategy == StatusBarHookStrategySelector.Strategy.MIUI_DISPATCH) {
+            installMiuiDispatchHook(phoneStatusBar);
+            return;
         }
-        return phoneStatusBar.getDeclaredMethod("dispatchTouchEvent", MotionEvent.class);
+        if (strategy == StatusBarHookStrategySelector.Strategy.OPLUS_INFLATE_LISTENER) {
+            installOplusInflateHook(phoneStatusBar);
+            return;
+        }
+        throw new IllegalStateException("Unsupported status-bar class structure");
+    }
+
+    private void installMiuiDispatchHook(Class<?> phoneStatusBar)
+            throws NoSuchMethodException {
+        Method touchMethod = phoneStatusBar.getDeclaredMethod(
+                "dispatchTouchEvent",
+                MotionEvent.class);
+        hook(touchMethod)
+                .setId("status-bar-force-close:miui-touch-observer")
+                .intercept(chain -> {
+                    Object result = chain.proceed();
+                    observeTouch(chain.getThisObject(), chain.getArg(0));
+                    return result;
+                });
+        report(Log.INFO, "hook_installed", "strategy=MIUI_DISPATCH method="
+                + touchMethod.getDeclaringClass().getName() + "."
+                + touchMethod.getName(), null);
+    }
+
+    private void installOplusInflateHook(Class<?> phoneStatusBar)
+            throws NoSuchMethodException {
+        Method inflateMethod = phoneStatusBar.getDeclaredMethod("onFinishInflate");
+        hook(inflateMethod)
+                .setId("status-bar-force-close:oplus-touch-listener")
+                .intercept(chain -> {
+                    try {
+                        attachTouchListener(chain.getThisObject());
+                    } catch (Throwable throwable) {
+                        diagnosticLogger.error("touch_listener_attach_failed", "view="
+                                + className(chain.getThisObject()), throwable);
+                    }
+                    return chain.proceed();
+                });
+        report(Log.INFO, "hook_installed", "strategy=OPLUS_INFLATE_LISTENER method="
+                + inflateMethod.getDeclaringClass().getName() + "."
+                + inflateMethod.getName(), null);
+    }
+
+    @SuppressLint("ClickableViewAccessibility")
+    private void attachTouchListener(Object viewObject) {
+        if (!(viewObject instanceof View view)) {
+            diagnosticLogger.warn("touch_listener_attach_skipped", "view="
+                    + className(viewObject) + " reason=not-a-view");
+            return;
+        }
+        view.setOnTouchListener((touchedView, event) -> {
+            observeTouch(touchedView, event);
+            return false;
+        });
+        diagnosticLogger.info("touch_listener_attached", "view="
+                + view.getClass().getName());
+    }
+
+    private static Class<?> findClassIfPresent(String className, ClassLoader classLoader) {
+        try {
+            return Class.forName(className, false, classLoader);
+        } catch (ClassNotFoundException ignored) {
+            return null;
+        }
+    }
+
+    private static String className(Object value) {
+        if (value == null) {
+            return "missing";
+        }
+        return value instanceof Class<?> type ? type.getName() : value.getClass().getName();
     }
 
     private void observeTouch(Object viewObject, Object eventObject) {

@@ -18,7 +18,7 @@ body:
     id: system
     attributes:
       label: HyperOS, Android, and SDK versions
-      placeholder: OS4.x / Android 17 / SDK 37
+      placeholder: HyperOS 4 / Android 17 or ColorOS 16 / Android 16
     validations:
       required: true
   - type: input
