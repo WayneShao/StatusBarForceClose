@@ -4,6 +4,7 @@ import java.util.concurrent.TimeUnit;
 import java.util.regex.Pattern;
 
 final class SuForceStopMethod implements ForceStopMethod {
+    private static final String SU_EXECUTABLE = "/system/bin/su";
     private static final Pattern PACKAGE_NAME = Pattern.compile("[A-Za-z0-9._]+");
     private static final long TIMEOUT_SECONDS = 2L;
     private final DiagnosticLogger logger;
@@ -21,10 +22,9 @@ final class SuForceStopMethod implements ForceStopMethod {
 
         Process process = null;
         try {
-            logger.info("su_attempt", "package=" + packageName + " user=" + userId);
-            String command = "am force-stop --user " + userId + " " + packageName
-                    + " >/dev/null 2>&1";
-            process = new ProcessBuilder("su", "-c", command).start();
+            logger.info("su_attempt", "package=" + packageName + " user=" + userId
+                    + " executable=" + SU_EXECUTABLE);
+            process = new ProcessBuilder(buildProcessArguments(packageName, userId)).start();
             if (!process.waitFor(TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                 process.destroyForcibly();
                 logger.warn("su_timeout", "package=" + packageName + " user=" + userId
@@ -46,5 +46,11 @@ final class SuForceStopMethod implements ForceStopMethod {
                     throwable);
             return false;
         }
+    }
+
+    static String[] buildProcessArguments(String packageName, int userId) {
+        String command = "am force-stop --user " + userId + " " + packageName
+                + " >/dev/null 2>&1";
+        return new String[] {SU_EXECUTABLE, "-c", command};
     }
 }
