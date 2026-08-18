@@ -1,19 +1,46 @@
-# HyperOS 4 SystemUI Evidence
+# Verified device evidence for 0.2.0
 
-Read-only snapshot collected on 2026-08-17 from the user's Xiaomi `nezha`:
+Evidence was collected from the user's two rooted daily devices. The same Debug APK built from
+commit `a75c57d` was installed on both devices and had SHA-256
+`635F910FD8334C46C25DC542DC57EDA8D9CCA17892615B36BD3BDDAB72A4ECF0`.
 
-- Android SDK: 37
+## Xiaomi 17 Ultra for Leica
+
+- codename / model: `nezha` / `25128PNA1C`
+- HyperOS: `OS4.0.0.10.XPACNXM`
+- Android: 17 / SDK 37
 - SystemUI package: `com.android.systemui`
-- SystemUI version: `17.03.260226.r` (`versionCode=202602260`)
-- APK path: `/system_ext/priv-app/MiuiSystemUI/MiuiSystemUI.apk`
-- Pulled APK SHA-256:
-  `9944994E50A94C077BB7EB8315986554305DC00C39B1E7E2B9C62512941FA7C5`
-- `MiuiPhoneStatusBarView` is a Java class extending `PhoneStatusBarView`.
-- `PhoneStatusBarView` declares final
-  `dispatchTouchEvent(MotionEvent)`, `onInterceptTouchEvent(MotionEvent)`, and
-  final `onTouchEvent(MotionEvent)` methods.
-- The SystemUI manifest requests `REAL_GET_TASKS`, `MANAGE_ACTIVITY_TASKS`, and
-  `FORCE_STOP_PACKAGES`.
+- selected hook: `MIUI_DISPATCH`
+- target: WeChat, `com.tencent.mm`, user 0
+- bridge process: module UID process created and accepted only the SystemUI calling UID
+- libsu process: `RootActivityManagerService`, observed `uid=0`
+- force-stop result: `ROOT_SERVICE`
+- visible result: `已强制关闭微信`
 
-The device APK was copied only for local analysis. No system APK or other Xiaomi
-file was changed, replaced, repacked, or re-signed.
+The SystemUI PID changed only during the explicitly requested scope restart. `lspd` and
+`system_server` PIDs remained unchanged during validation.
+
+## OnePlus 13T
+
+- model: `PKX110`
+- build: `PKX110_16.0.10.500(CN01)`
+- ColorOS: 16 / ROM code `V16.1.0`
+- Android: 16 / SDK 36
+- SystemUI version: `16.99.12` (`versionCode 169912`)
+- selected hook: `OPLUS_INFLATE_LISTENER`
+- target: WeChat, `com.tencent.mm`, user 0
+- force-stop result: `ROOT_SERVICE`
+- visible result: `已强制关闭微信`
+
+The new SystemUI PID recorded three successful `ROOT_SERVICE` results and zero direct-su,
+ContentProvider, or Binder-fallback attempts. `lspd` and `system_server` PIDs remained unchanged.
+ColorOS did not expose the module/root process direct `Log.println` records through the current ADB
+logcat buffer, so this document does not claim a directly observed OnePlus root UID line.
+
+## Scope of the claim
+
+- The two exact builds above are verified.
+- User 0 behavior is verified on both devices.
+- User 999 and other valid user IDs are covered by JVM tests but are not claimed as new 0.2.0
+  device validation.
+- No vendor APK, system partition file, `lspd`, or `system_server` was modified or restarted.

@@ -141,6 +141,9 @@ jobs:
           if grep -Eq '^lib/' <<<"$archive_entries"; then
             echo "::error::APK unexpectedly contains native libraries"; exit 1
           fi
+          if ! grep -Fxq 'assets/main.jar' <<<"$archive_entries"; then
+            echo "::error::APK is missing the libsu RootService runtime"; exit 1
+          fi
 
           expected_module_prop=$'minApiVersion=102\ntargetApiVersion=102\nstaticScope=true'
           expected_scope='com.android.systemui'
