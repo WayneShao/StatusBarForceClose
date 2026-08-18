@@ -6,5 +6,12 @@
         android:hasCode="true"
         android:label="StatusBar Force Close"
         android:supportsRtl="true"
-        tools:ignore="DataExtractionRules,MissingApplicationIcon" />
+        tools:ignore="DataExtractionRules,MissingApplicationIcon">
+        <provider
+            android:name=".RootBridgeProvider"
+            android:authorities="com.wayne.statusbarforceclose.root"
+            android:exported="true"
+            android:grantUriPermissions="false"
+            tools:ignore="ExportedContentProvider" />
+    </application>
 </manifest>

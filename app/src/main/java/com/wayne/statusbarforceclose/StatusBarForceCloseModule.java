@@ -43,9 +43,8 @@ public final class StatusBarForceCloseModule extends XposedModule {
         return thread;
     });
     private final DiagnosticLogger diagnosticLogger = this::report;
-    private final ForceStopCoordinator coordinator = new ForceStopCoordinator(
-            new SuForceStopMethod(diagnosticLogger),
-            new BinderForceStopMethod(diagnosticLogger));
+    private final ForceStopMethod rootMethod = new SuForceStopMethod(diagnosticLogger);
+    private final ForceStopMethod binderMethod = new BinderForceStopMethod(diagnosticLogger);
 
     @Override
     public void onModuleLoaded(ModuleLoadedParam param) {
@@ -223,6 +222,12 @@ public final class StatusBarForceCloseModule extends XposedModule {
 
                 diagnosticLogger.info("force_stop_start", "requestId=" + requestId
                         + " package=" + task.packageName() + " user=" + task.userId());
+                ForceStopCoordinator coordinator = new ForceStopCoordinator(
+                        rootMethod,
+                        new RootBridgeForceStopMethod(
+                                applicationContext == null ? context : applicationContext,
+                                diagnosticLogger),
+                        binderMethod);
                 ForceStopResult result = coordinator.forceStop(
                         task.packageName(), task.userId());
                 diagnosticLogger.log(
