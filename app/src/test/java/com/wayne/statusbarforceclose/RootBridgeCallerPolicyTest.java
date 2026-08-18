@@ -8,12 +8,14 @@ import org.junit.Test;
 public class RootBridgeCallerPolicyTest {
     @Test
     public void acceptsSystemUi() {
-        assertTrue(RootBridgeCallerPolicy.isAllowed("com.android.systemui"));
+        assertTrue(RootBridgeCallerPolicy.isAllowed(
+                new String[] {"com.example.shared", "com.android.systemui"}));
     }
 
     @Test
     public void rejectsOtherPackages() {
-        assertFalse(RootBridgeCallerPolicy.isAllowed("com.example.attacker"));
+        assertFalse(RootBridgeCallerPolicy.isAllowed(
+                new String[] {"com.example.attacker"}));
     }
 
     @Test

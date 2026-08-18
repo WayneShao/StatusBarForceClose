@@ -122,20 +122,17 @@ jobs:
             echo "::error::APK unexpectedly declares an application icon"; exit 1;
           }
 
-          for component in activity service receiver; do
+          for component in activity provider receiver; do
             if grep -Eq "^[[:space:]]+E: ${component}( |$)" <<<"$manifest"; then
               echo "::error::APK unexpectedly declares an Android $component"; exit 1
             fi
           done
-          provider_count="$(grep -Ec '^[[:space:]]+E: provider( |$)' <<<"$manifest")"
-          [[ "$provider_count" == '1' ]] || {
-            echo "::error::APK must declare exactly one root bridge provider"; exit 1;
+          service_count="$(grep -Ec '^[[:space:]]+E: service( |$)' <<<"$manifest")"
+          [[ "$service_count" == '1' ]] || {
+            echo "::error::APK must declare exactly one force-stop bridge service"; exit 1;
           }
-          grep -Fq 'com.wayne.statusbarforceclose.RootBridgeProvider' <<<"$manifest" || {
-            echo "::error::APK root bridge provider is missing"; exit 1;
-          }
-          grep -Fq 'com.wayne.statusbarforceclose.root' <<<"$manifest" || {
-            echo "::error::APK root bridge authority is missing"; exit 1;
+          grep -Fq 'com.wayne.statusbarforceclose.ForceStopBridgeService' <<<"$manifest" || {
+            echo "::error::APK force-stop bridge service is missing"; exit 1;
           }
           if grep -Eq '^[[:space:]]+E: uses-permission( |$)' <<<"$manifest"; then
             echo "::error::APK unexpectedly requests an Android permission"; exit 1

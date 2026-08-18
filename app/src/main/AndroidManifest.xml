@@ -7,11 +7,10 @@
         android:label="StatusBar Force Close"
         android:supportsRtl="true"
         tools:ignore="DataExtractionRules,MissingApplicationIcon">
-        <provider
-            android:name=".RootBridgeProvider"
-            android:authorities="com.wayne.statusbarforceclose.root"
+        <service
+            android:name=".ForceStopBridgeService"
             android:exported="true"
-            android:grantUriPermissions="false"
-            tools:ignore="ExportedContentProvider" />
+            android:stopWithTask="false"
+            tools:ignore="ExportedService" />
     </application>
 </manifest>

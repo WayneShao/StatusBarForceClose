@@ -1,8 +1,7 @@
 package com.wayne.statusbarforceclose;
 
 enum ForceStopResult {
-    ROOT,
-    ROOT_BRIDGE,
+    ROOT_SERVICE,
     BINDER,
     FAILED
 }
