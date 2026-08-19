@@ -2,5 +2,5 @@ package com.wayne.statusbarforceclose;
 
 @FunctionalInterface
 interface ForceStopMethod {
-    boolean forceStop(String packageName, int userId);
+    BackendResult forceStop(String packageName, int userId, boolean waitForConnection);
 }

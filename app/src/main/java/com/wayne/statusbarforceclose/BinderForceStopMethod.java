@@ -2,6 +2,7 @@ package com.wayne.statusbarforceclose;
 
 import android.annotation.SuppressLint;
 
+import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 
 final class BinderForceStopMethod implements ForceStopMethod {
@@ -13,10 +14,11 @@ final class BinderForceStopMethod implements ForceStopMethod {
 
     @Override
     @SuppressLint({"DiscouragedPrivateApi", "PrivateApi"})
-    public boolean forceStop(String packageName, int userId) {
+    public BackendResult forceStop(String packageName, int userId, boolean waitForConnection) {
+        long startedAt = android.os.SystemClock.elapsedRealtime();
         if (packageName == null || userId < 0) {
             logger.warn("binder_invalid_target", "package=" + packageName + " user=" + userId);
-            return false;
+            return result(BackendStatus.OPERATION_FAILED, startedAt);
         }
 
         try {
@@ -28,7 +30,7 @@ final class BinderForceStopMethod implements ForceStopMethod {
             if (service == null) {
                 logger.warn("binder_service_missing", "package=" + packageName
                         + " user=" + userId);
-                return false;
+                return result(BackendStatus.TRANSIENT_TRANSPORT_FAILURE, startedAt);
             }
 
             Class<?> interfaceClass = Class.forName("android.app.IActivityManager");
@@ -36,11 +38,40 @@ final class BinderForceStopMethod implements ForceStopMethod {
                     "forceStopPackage", String.class, int.class);
             forceStopPackage.invoke(service, packageName, userId);
             logger.info("binder_success", "package=" + packageName + " user=" + userId);
-            return true;
+            return result(BackendStatus.SUCCESS, startedAt);
         } catch (Throwable throwable) {
             logger.error("binder_exception", "package=" + packageName + " user=" + userId,
                     throwable);
-            return false;
+            return result(classify(throwable), startedAt);
         }
+    }
+
+    private static BackendStatus classify(Throwable throwable) {
+        Throwable cause = unwrap(throwable);
+        if (cause instanceof ClassNotFoundException || cause instanceof NoSuchMethodException) {
+            return BackendStatus.UNSUPPORTED;
+        }
+        if (cause instanceof SecurityException) {
+            return BackendStatus.PERMISSION_REJECTED;
+        }
+        if (cause instanceof android.os.RemoteException) {
+            return BackendStatus.TRANSIENT_TRANSPORT_FAILURE;
+        }
+        return BackendStatus.OPERATION_FAILED;
+    }
+
+    private static Throwable unwrap(Throwable throwable) {
+        Throwable current = throwable;
+        while (current instanceof InvocationTargetException && current.getCause() != null) {
+            current = current.getCause();
+        }
+        return current;
+    }
+
+    private static BackendResult result(BackendStatus status, long startedAt) {
+        return new BackendResult(
+                BackendKind.SYSTEM_UI,
+                status,
+                android.os.SystemClock.elapsedRealtime() - startedAt);
     }
 }

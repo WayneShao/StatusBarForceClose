@@ -23,11 +23,12 @@ final class RootBridgeForceStopMethod implements ForceStopMethod {
     }
 
     @Override
-    public boolean forceStop(String packageName, int userId) {
+    public BackendResult forceStop(String packageName, int userId, boolean waitForConnection) {
+        long startedAt = android.os.SystemClock.elapsedRealtime();
         if (packageName == null || packageName.isBlank() || userId < 0) {
             logger.warn("root_bridge_invalid_target", "package=" + packageName
                     + " user=" + userId);
-            return false;
+            return result(BackendStatus.OPERATION_FAILED, startedAt);
         }
 
         CountDownLatch connected = new CountDownLatch(1);
@@ -67,14 +68,14 @@ final class RootBridgeForceStopMethod implements ForceStopMethod {
             if (!bound || !connected.await(CONNECTION_TIMEOUT_SECONDS, TimeUnit.SECONDS)) {
                 logger.warn("root_bridge_bind_timeout", "package=" + packageName
                         + " user=" + userId + " accepted=" + bound);
-                return false;
+                return result(BackendStatus.TRANSIENT_TRANSPORT_FAILURE, startedAt);
             }
 
             IForceStopBridge bridge = IForceStopBridge.Stub.asInterface(remoteBinder.get());
             if (bridge == null) {
                 logger.warn("root_bridge_missing_binder", "package=" + packageName
                         + " user=" + userId);
-                return false;
+                return result(BackendStatus.TRANSIENT_TRANSPORT_FAILURE, startedAt);
             }
             boolean success = bridge.forceStop(packageName, userId);
             logger.log(
@@ -82,16 +83,18 @@ final class RootBridgeForceStopMethod implements ForceStopMethod {
                     "root_bridge_result",
                     "package=" + packageName + " user=" + userId + " success=" + success,
                     null);
-            return success;
+            return result(
+                    success ? BackendStatus.SUCCESS : BackendStatus.OPERATION_FAILED,
+                    startedAt);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             logger.error("root_bridge_interrupted", "package=" + packageName
                     + " user=" + userId, interrupted);
-            return false;
+            return result(BackendStatus.TRANSIENT_TRANSPORT_FAILURE, startedAt);
         } catch (Throwable throwable) {
             logger.error("root_bridge_exception", "package=" + packageName
                     + " user=" + userId, throwable);
-            return false;
+            return result(BackendStatus.TRANSIENT_TRANSPORT_FAILURE, startedAt);
         } finally {
             if (bound) {
                 try {
@@ -104,5 +107,12 @@ final class RootBridgeForceStopMethod implements ForceStopMethod {
                 }
             }
         }
+    }
+
+    private static BackendResult result(BackendStatus status, long startedAt) {
+        return new BackendResult(
+                BackendKind.ROOT,
+                status,
+                android.os.SystemClock.elapsedRealtime() - startedAt);
     }
 }

@@ -12,6 +12,7 @@ import android.widget.Toast;
 
 import java.lang.reflect.Method;
 import java.util.Collections;
+import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.concurrent.ExecutorService;
@@ -226,15 +227,18 @@ public final class StatusBarForceCloseModule extends XposedModule {
                                 applicationContext == null ? context : applicationContext,
                                 diagnosticLogger),
                         binderMethod);
+                ExecutionPlan compatibilityPlan = new ExecutionPlan(List.of(
+                        new ExecutionStep(BackendKind.ROOT, true),
+                        new ExecutionStep(BackendKind.SYSTEM_UI, false)));
                 ForceStopResult result = coordinator.forceStop(
-                        task.packageName(), task.userId());
+                        compatibilityPlan, task.packageName(), task.userId());
                 diagnosticLogger.log(
-                        result == ForceStopResult.FAILED ? Log.WARN : Log.INFO,
+                        result.isSuccess() ? Log.INFO : Log.WARN,
                         "force_stop_result",
                         "requestId=" + requestId + " package=" + task.packageName()
                                 + " user=" + task.userId() + " result=" + result,
                         null);
-                if (result != ForceStopResult.FAILED) {
+                if (result.isSuccess()) {
                     boolean accepted = mainHandler.post(() -> showSuccessToast(
                             context, task, requestId));
                     diagnosticLogger.log(

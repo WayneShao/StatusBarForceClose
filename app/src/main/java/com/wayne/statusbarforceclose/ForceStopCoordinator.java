@@ -1,5 +1,7 @@
 package com.wayne.statusbarforceclose;
 
+import java.util.Objects;
+
 final class ForceStopCoordinator {
     private final ForceStopMethod rootServiceMethod;
     private final ForceStopMethod binderMethod;
@@ -11,12 +13,21 @@ final class ForceStopCoordinator {
         this.binderMethod = binderMethod;
     }
 
-    ForceStopResult forceStop(String packageName, int userId) {
-        if (rootServiceMethod.forceStop(packageName, userId)) {
-            return ForceStopResult.ROOT_SERVICE;
+    ForceStopResult forceStop(ExecutionPlan plan, String packageName, int userId) {
+        Objects.requireNonNull(plan, "plan");
+        BackendResult lastResult = null;
+        for (ExecutionStep step : plan.steps()) {
+            ForceStopMethod method = step.backend() == BackendKind.ROOT
+                    ? rootServiceMethod
+                    : binderMethod;
+            lastResult = method.forceStop(packageName, userId, step.waitForConnection());
+            if (lastResult.backend() != step.backend()) {
+                throw new IllegalStateException("Backend returned a mismatched result kind");
+            }
+            if (lastResult.isSuccess()) {
+                return ForceStopResult.from(lastResult);
+            }
         }
-        return binderMethod.forceStop(packageName, userId)
-                ? ForceStopResult.BINDER
-                : ForceStopResult.FAILED;
+        return lastResult == null ? ForceStopResult.noBackend() : ForceStopResult.from(lastResult);
     }
 }
