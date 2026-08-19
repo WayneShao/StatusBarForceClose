@@ -280,8 +280,18 @@ final class BridgeRequestDispatcher {
     synchronized BridgeRuntimeState getRuntimeState(CallerIdentity caller, int protocol) {
         return authorizeModule(caller, protocol) == BridgeProtocol.Status.OK
                 ? runtimeState()
-                : new BridgeRuntimeState(
-                        RootConnectionState.INCOMPATIBLE, false, false);
+                : rejectedRuntimeState();
+    }
+
+    synchronized BridgeRuntimeState getSystemUiRuntimeState(
+            CallerIdentity caller,
+            int protocol,
+            String generation,
+            String sessionToken) {
+        return protocol == BridgeProtocol.VERSION
+                && authorizedSystemUi(caller, protocol, generation, sessionToken)
+                ? runtimeState()
+                : rejectedRuntimeState();
     }
 
     synchronized void recordRootTerminal(RootConnectionState terminalState) {
@@ -324,6 +334,10 @@ final class BridgeRequestDispatcher {
                 rootOperations.state(),
                 sessionRegistry.hasActiveSession(),
                 state.configuration().backgroundOptimizationEnabled());
+    }
+
+    private static BridgeRuntimeState rejectedRuntimeState() {
+        return new BridgeRuntimeState(RootConnectionState.INCOMPATIBLE, false, false);
     }
 
     private void notifyRuntimeObservers() {

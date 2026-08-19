@@ -33,4 +33,6 @@ interface IForceStopBridge {
     int registerRuntimeObserver(int protocol, IRuntimeObserver observer);
     boolean unregisterRuntimeObserver(int protocol, IRuntimeObserver observer);
     BridgeRuntimeStateParcel getRuntimeState(int protocol);
+    BridgeRuntimeStateParcel getSystemUiRuntimeState(
+            int protocol, String generation, String sessionToken);
 }

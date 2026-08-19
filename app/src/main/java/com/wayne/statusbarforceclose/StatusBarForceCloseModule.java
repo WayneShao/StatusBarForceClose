@@ -12,7 +12,6 @@ import android.widget.Toast;
 
 import java.lang.reflect.Method;
 import java.util.Collections;
-import java.util.List;
 import java.util.Map;
 import java.util.WeakHashMap;
 import java.util.concurrent.ExecutorService;
@@ -44,7 +43,9 @@ public final class StatusBarForceCloseModule extends XposedModule {
         return thread;
     });
     private final DiagnosticLogger diagnosticLogger = this::report;
-    private final ForceStopMethod binderMethod = new BinderForceStopMethod(diagnosticLogger);
+    private final SystemUiRuntime systemUiRuntime = new SystemUiRuntime(
+            diagnosticLogger,
+            new BinderForceStopMethod(diagnosticLogger));
 
     @Override
     public void onModuleLoaded(ModuleLoadedParam param) {
@@ -89,6 +90,7 @@ public final class StatusBarForceCloseModule extends XposedModule {
                 + " oplus=" + className(oplusExtension), null);
 
         if (strategy == StatusBarHookStrategySelector.Strategy.MIUI_DISPATCH) {
+            installRuntimeInflateHook(phoneStatusBar);
             installMiuiDispatchHook(phoneStatusBar);
             return;
         }
@@ -97,6 +99,21 @@ public final class StatusBarForceCloseModule extends XposedModule {
             return;
         }
         throw new IllegalStateException("Unsupported status-bar class structure");
+    }
+
+    private void installRuntimeInflateHook(Class<?> phoneStatusBar)
+            throws NoSuchMethodException {
+        Method inflateMethod = phoneStatusBar.getDeclaredMethod("onFinishInflate");
+        hook(inflateMethod)
+                .setId("status-bar-force-close:runtime-start")
+                .intercept(chain -> {
+                    Object result = chain.proceed();
+                    ensureRuntimeStarted(chain.getThisObject());
+                    return result;
+                });
+        report(Log.INFO, "hook_installed", "strategy=RUNTIME_START method="
+                + inflateMethod.getDeclaringClass().getName() + "."
+                + inflateMethod.getName(), null);
     }
 
     private void installMiuiDispatchHook(Class<?> phoneStatusBar)
@@ -122,17 +139,28 @@ public final class StatusBarForceCloseModule extends XposedModule {
         hook(inflateMethod)
                 .setId("status-bar-force-close:oplus-touch-listener")
                 .intercept(chain -> {
+                    Object result = chain.proceed();
                     try {
+                        ensureRuntimeStarted(chain.getThisObject());
                         attachTouchListener(chain.getThisObject());
                     } catch (Throwable throwable) {
                         diagnosticLogger.error("touch_listener_attach_failed", "view="
                                 + className(chain.getThisObject()), throwable);
                     }
-                    return chain.proceed();
+                    return result;
                 });
         report(Log.INFO, "hook_installed", "strategy=OPLUS_INFLATE_LISTENER method="
                 + inflateMethod.getDeclaringClass().getName() + "."
                 + inflateMethod.getName(), null);
+    }
+
+    private void ensureRuntimeStarted(Object viewObject) {
+        if (viewObject instanceof View view) {
+            systemUiRuntime.ensureStarted(view.getContext());
+        } else {
+            diagnosticLogger.warn("systemui_runtime_start_skipped", "view="
+                    + className(viewObject) + " reason=not-a-view");
+        }
     }
 
     @SuppressLint("ClickableViewAccessibility")
@@ -178,6 +206,7 @@ public final class StatusBarForceCloseModule extends XposedModule {
                 event.getEventTime());
         if (doubleTap) {
             diagnosticLogger.info("double_tap_detected", "view=" + view.getClass().getName());
+            systemUiRuntime.ensureStarted(view.getContext());
             requestForceStop(view.getContext());
         }
     }
@@ -222,16 +251,8 @@ public final class StatusBarForceCloseModule extends XposedModule {
 
                 diagnosticLogger.info("force_stop_start", "requestId=" + requestId
                         + " package=" + task.packageName() + " user=" + task.userId());
-                ForceStopCoordinator coordinator = new ForceStopCoordinator(
-                        new RootBridgeForceStopMethod(
-                                applicationContext == null ? context : applicationContext,
-                                diagnosticLogger),
-                        binderMethod);
-                ExecutionPlan compatibilityPlan = new ExecutionPlan(List.of(
-                        new ExecutionStep(BackendKind.ROOT, true),
-                        new ExecutionStep(BackendKind.SYSTEM_UI, false)));
-                ForceStopResult result = coordinator.forceStop(
-                        compatibilityPlan, task.packageName(), task.userId());
+                ForceStopResult result = systemUiRuntime.forceStop(
+                        task.packageName(), task.userId());
                 diagnosticLogger.log(
                         result.isSuccess() ? Log.INFO : Log.WARN,
                         "force_stop_result",

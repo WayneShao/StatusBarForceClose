@@ -77,6 +77,38 @@ public final class BridgeRequestDispatcherTest {
     }
 
     @Test
+    public void systemUiRuntimeStateRequiresLiveMatchingSession() {
+        Fixture fixture = fixture();
+        SystemUiRegistration registration = fixture.dispatcher.registerSystemUi(
+                SYSTEM_UI, BridgeProtocol.VERSION, "generation-a", ignored -> { });
+
+        BridgeRuntimeState accepted = fixture.dispatcher.getSystemUiRuntimeState(
+                SYSTEM_UI,
+                BridgeProtocol.VERSION,
+                "generation-a",
+                registration.sessionToken());
+        assertEquals(RootConnectionState.CONNECTED, accepted.rootState());
+        assertTrue(accepted.systemUiConnected());
+
+        for (CallerIdentity caller : List.of(MODULE, ATTACKER)) {
+            BridgeRuntimeState rejected = fixture.dispatcher.getSystemUiRuntimeState(
+                    caller,
+                    BridgeProtocol.VERSION,
+                    "generation-a",
+                    registration.sessionToken());
+            assertEquals(RootConnectionState.INCOMPATIBLE, rejected.rootState());
+            assertFalse(rejected.systemUiConnected());
+        }
+        BridgeRuntimeState stale = fixture.dispatcher.getSystemUiRuntimeState(
+                SYSTEM_UI,
+                BridgeProtocol.VERSION,
+                "generation-a",
+                "stale-token");
+        assertEquals(RootConnectionState.INCOMPATIBLE, stale.rootState());
+        assertFalse(stale.systemUiConnected());
+    }
+
+    @Test
     public void wrongProtocolAndInvalidPayloadFailBeforeBackends() {
         Fixture fixture = fixture();
         SystemUiRegistration registration = fixture.dispatcher.registerSystemUi(

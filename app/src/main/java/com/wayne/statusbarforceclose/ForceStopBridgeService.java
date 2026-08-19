@@ -171,6 +171,13 @@ public final class ForceStopBridgeService extends Service {
             return BridgeRuntimeStateParcel.fromModel(
                     dispatcher.getRuntimeState(callerIdentity(), protocol));
         }
+
+        @Override
+        public BridgeRuntimeStateParcel getSystemUiRuntimeState(
+                int protocol, String generation, String sessionToken) {
+            return BridgeRuntimeStateParcel.fromModel(dispatcher.getSystemUiRuntimeState(
+                    callerIdentity(), protocol, generation, sessionToken));
+        }
     };
 
     @Override

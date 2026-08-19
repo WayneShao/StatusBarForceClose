@@ -1,6 +1,8 @@
 package com.wayne.statusbarforceclose;
 
 import android.annotation.SuppressLint;
+import android.content.Context;
+import android.content.pm.PackageManager;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -10,6 +12,26 @@ final class BinderForceStopMethod implements ForceStopMethod {
 
     BinderForceStopMethod(DiagnosticLogger logger) {
         this.logger = logger;
+    }
+
+    @SuppressLint({"DiscouragedPrivateApi", "PrivateApi"})
+    static boolean isApiPresent() {
+        try {
+            Class<?> activityManagerClass = Class.forName("android.app.ActivityManager");
+            activityManagerClass.getDeclaredMethod("getService");
+            Class<?> interfaceClass = Class.forName("android.app.IActivityManager");
+            interfaceClass.getMethod("forceStopPackage", String.class, int.class);
+            return true;
+        } catch (ReflectiveOperationException ignored) {
+            return false;
+        }
+    }
+
+    static boolean isAvailableTo(Context context) {
+        return context != null
+                && isApiPresent()
+                && context.checkSelfPermission("android.permission.FORCE_STOP_PACKAGES")
+                == PackageManager.PERMISSION_GRANTED;
     }
 
     @Override

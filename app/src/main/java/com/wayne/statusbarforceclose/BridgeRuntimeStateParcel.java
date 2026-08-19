@@ -37,6 +37,13 @@ public final class BridgeRuntimeStateParcel implements Parcelable {
                 model.backgroundOptimizationEnabled());
     }
 
+    BridgeRuntimeState toModel() {
+        return new BridgeRuntimeState(
+                RootConnectionState.values()[rootState],
+                systemUiConnected,
+                backgroundOptimizationEnabled);
+    }
+
     @Override
     public int describeContents() {
         return 0;
