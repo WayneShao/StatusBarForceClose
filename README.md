@@ -2,7 +2,7 @@
 
 一个只做一件事的现代 LSPosed 模块：双击状态栏，强制停止当前前台应用，并以动态 Toast 显示实际被停止的应用名称。
 
-当前开发版本面向 Android 16/17、libxposed API 102 和已 root 设备。APK 提供一个原生设置入口和自适应图标，Android 组件仅有一个 Launcher Activity 与一个供 SystemUI 显式绑定的 Bridge Service；没有权限、Provider、清单 Receiver、前台 Service 或开机自启，静态作用域只有 `com.android.systemui`。
+当前版本面向 Android 16/17、libxposed API 102 和已 root 设备。APK 提供一个原生设置 Activity、一个可隐藏的 Launcher alias 和一个供 SystemUI 显式绑定的 Bridge Service；没有权限、Provider、清单 Receiver、前台 Service 或开机自启，静态作用域只有 `com.android.systemui`。
 
 ## 项目缘起
 
@@ -44,11 +44,17 @@
 
 “后台保护”默认开启。模块只记录并修改自己实际拥有的 Doze 白名单与后台 AppOps 项目；关闭时仅恢复仍由本模块持有的原值，检测到外部改动则保留外部状态。设置页另提供厂商后台设置、系统电池优化设置和应用详情的逐级回退入口。
 
+“隐藏桌面图标”默认关闭。开启后只禁用独立的 Launcher alias，不停止设置页，也不影响 SystemUI Hook、Bridge 或 RootService；覆盖安装会保留当前选择。隐藏后仍可从 LSPosed 的模块设置入口打开，也可以显式启动：
+
+```powershell
+adb -s SERIAL shell am start -n com.wayne.statusbarforceclose/.SettingsActivity
+```
+
 Magisk 通常可以在首次请求时弹出授权窗口；KernelSU 的授权策略取决于管理器配置，可能需要先在管理器中明确授权。设置页不把授权弹窗结果当作功能状态，实际连接以 RootService 状态行为准。
 
 ## 已验证环境
 
-下表是已发布 `0.2.0` 的历史实机证据。当前开发分支新增的设置页、持久连接、五模式、事件恢复与后台保护已通过本地自动化门禁，但尚未写入双机实测结论；完成两台设备验收后再更新本节和 `docs/device-evidence.md`。
+下表保留 `0.2.0` 的核心实机基线。`0.3.0` 的设置页、持久连接、五种执行模式、事件恢复和后台保护已通过本地门禁，用户也已在两台日用设备上确认双击强制结束功能无异常。新“隐藏桌面图标”开关已在 OnePlus 上完成隐藏、显式重入、恢复和覆盖安装保持状态测试；小米上的同项复测以 `docs/device-evidence.md` 的最新记录为准。
 
 | 设备 | 系统 | Android | SystemUI Hook | 强制停止结果 |
 | --- | --- | --- | --- | --- |
@@ -72,7 +78,7 @@ Magisk 通常可以在首次请求时弹出授权窗口；KernelSU 的授权策�
 
 1. 安装签名 APK。
 2. 向本模块授予 root 权限。
-3. 打开“状态栏强制结束”，确认连接状态并选择执行模式；建议保持“后台保护”开启。
+3. 打开“状态栏强制结束”，确认连接状态并选择执行模式；建议保持“后台保护”开启，可按需隐藏桌面图标。
 4. 在 LSPosed 中启用模块，保持作用域为“系统界面” (`com.android.systemui`)。
 5. 重启 SystemUI 或重启设备，使 Hook 生效。
 6. 打开一个普通应用，双击状态栏验证强制停止、动态 Toast 和最近执行状态。
@@ -134,7 +140,7 @@ $env:ANDROID_KEY_PASSWORD='KEY_PASSWORD'
 
 - `.github/workflows/ci.yml`：对 `main` 的 push 和 pull request 执行单元测试、lint、Debug、仪器测试 APK 和混淆 Release 构建，并用同一脚本验证两个 APK 的组件与日志契约。
 - `.github/workflows/release.yml`：手动触发时生成保留诊断的签名测试包；推送 `versionCode-versionName` tag 时生成关闭诊断的正式 Release。
-- 发布工作流验证签名证书、包名、版本、SDK、唯一 Launcher Activity、唯一 Bridge Service、图标、零 Android 权限/Provider/清单 Receiver、API 102 元数据、静态作用域、隐藏 stub 未打包、R8 回调保留、日志剥离和 SHA-256。
+- 发布工作流验证签名证书、包名、版本、SDK、唯一设置 Activity、唯一 Launcher alias、唯一 Bridge Service、图标、零 Android 权限/Provider/清单 Receiver、API 102 元数据、静态作用域、隐藏 stub 未打包、R8 回调保留、日志剥离和 SHA-256。
 
 签名材料仅保存在 GitHub Actions Secrets 中。
 

@@ -18,7 +18,8 @@ The signed workflow treats an APK as releasable only after all checks below pass
 - version: Gradle `versionCode` and `versionName`
 - minimum SDK: 36
 - target SDK: 37
-- exactly one exported launcher `SettingsActivity` with an adaptive icon
+- exactly one exported module-settings `SettingsActivity`
+- exactly one exported Launcher alias targeting `SettingsActivity`, with an adaptive icon
 - exactly one exported `ForceStopBridgeService`
 - no Provider, manifest Receiver, Android permission, or native library
 - libsu `assets/main.jar` is packaged for RootService startup
@@ -39,6 +40,8 @@ The signed workflow treats an APK as releasable only after all checks below pass
 - English and Simplified Chinese resources are packaged
 - the Activity binds and observes the Bridge only while started
 - execution mode and background protection writes cross the versioned Binder boundary
+- launcher visibility is controlled only through the Launcher alias and survives an in-place update
+- disabling the Launcher alias does not disable the real settings Activity
 - the stored last successful result contains only backend type and elapsed time
 - no foreground package, label, Activity, task ID, or user history is persisted
 

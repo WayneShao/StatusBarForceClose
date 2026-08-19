@@ -68,11 +68,15 @@ public final class SettingsActivityTest {
             TextView mode = activity.findViewById(R.id.execution_mode_value);
             Switch optimization = activity.findViewById(
                     R.id.background_optimization_switch);
+            Switch hideLauncherIcon = activity.findViewById(
+                    R.id.hide_launcher_icon_switch);
             assertNotNull(root.getText());
             assertNotNull(systemUi.getText());
             assertNotNull(mode.getText());
             assertEquals(View.VISIBLE, optimization.getVisibility());
             assertTrue(optimization.isEnabled());
+            assertEquals(View.VISIBLE, hideLauncherIcon.getVisibility());
+            assertTrue(hideLauncherIcon.isEnabled());
         });
     }
 }

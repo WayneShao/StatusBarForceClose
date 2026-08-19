@@ -1,4 +1,26 @@
-# Verified device evidence for 0.2.0
+# Verified device evidence
+
+## 0.3.0 release candidate
+
+The user confirmed that the current double-tap force-stop behavior works normally on both daily
+devices after the settings, persistent Bridge, warm RootService, recovery events, and execution-mode
+work. Local verification completed 134 JVM tests with zero failures, Debug/AndroidTest/Release builds,
+lint, and the APK component/API 102 contract.
+
+The Launcher alias feature was installed and exercised on the OnePlus 13T (`PKX110`):
+
+- the default state exposed exactly one `.LauncherAlias` Launcher activity;
+- enabling `隐藏桌面图标` removed every Launcher resolution while `SettingsActivity` stayed resumed;
+- the real `SettingsActivity` remained directly launchable while the alias was disabled;
+- disabling the switch restored the Launcher alias;
+- an in-place `adb install -r` preserved the hidden component state;
+- the device was restored to the visible-icon state after the test.
+
+The Xiaomi device completed the current settings/root/SystemUI handshake check before its wireless
+ADB connection became unavailable. The Launcher alias switch is not claimed as tested on Xiaomi in
+this record until that device reconnects.
+
+## 0.2.0 release
 
 Evidence was collected from the user's two rooted daily devices. The same Debug APK built from
 commit `a75c57d` was installed on both devices and had SHA-256

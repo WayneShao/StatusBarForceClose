@@ -135,6 +135,17 @@
             android:layout_marginTop="24dp"
             android:text="@string/section_system" />
 
+        <Switch
+            android:id="@+id/hide_launcher_icon_switch"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:gravity="center_vertical"
+            android:minHeight="64dp"
+            android:text="@string/hide_launcher_icon"
+            android:textAppearance="@style/TextAppearance.StatusBarForceClose.RowTitle" />
+
+        <View style="@style/Widget.StatusBarForceClose.Divider" />
+
         <LinearLayout
             android:id="@+id/system_settings_row"
             style="@style/Widget.StatusBarForceClose.ActionRow"

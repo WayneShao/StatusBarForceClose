@@ -2,6 +2,7 @@
 .idea/
 local.properties
 **/build/
+/build-evidence/
 *.iml
 *.jks
 *.keystore

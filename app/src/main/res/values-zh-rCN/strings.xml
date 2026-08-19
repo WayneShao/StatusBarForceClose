@@ -26,6 +26,8 @@
     <string name="mode_root_only">仅 Root</string>
     <string name="mode_systemui_only">仅系统界面</string>
     <string name="background_optimization">后台保护</string>
+    <string name="hide_launcher_icon">隐藏桌面图标</string>
+    <string name="launcher_icon_write_failed">无法更新桌面图标状态</string>
     <string name="background_settings">后台设置</string>
     <string name="application_settings">应用设置</string>
 </resources>

@@ -41,9 +41,13 @@ application_line="$(sed -n '/^application:/{p;q;}' <<<"$badging")"
 }
 
 activity_count="$(grep -Ec '^[[:space:]]+E: activity( |$)' <<<"$manifest" || true)"
+activity_alias_count="$(grep -Ec '^[[:space:]]+E: activity-alias( |$)' <<<"$manifest" || true)"
 service_count="$(grep -Ec '^[[:space:]]+E: service( |$)' <<<"$manifest" || true)"
 [[ "$activity_count" == 1 ]] || {
   echo "::error::APK must declare exactly one Activity"; exit 1;
+}
+[[ "$activity_alias_count" == 1 ]] || {
+  echo "::error::APK must declare exactly one launcher Activity alias"; exit 1;
 }
 [[ "$service_count" == 1 ]] || {
   echo "::error::APK must declare exactly one Service"; exit 1;
@@ -58,8 +62,10 @@ if grep -Eq '^[[:space:]]+E: uses-permission( |$)' <<<"$manifest"; then
 fi
 for required in \
   com.wayne.statusbarforceclose.SettingsActivity \
+  com.wayne.statusbarforceclose.LauncherAlias \
   android.intent.action.MAIN \
   android.intent.category.LAUNCHER \
+  de.robv.android.xposed.category.MODULE_SETTINGS \
   com.wayne.statusbarforceclose.ForceStopBridgeService; do
   grep -Fq "$required" <<<"$manifest" || {
     echo "::error::Manifest is missing $required"; exit 1;

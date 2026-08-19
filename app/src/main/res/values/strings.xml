@@ -26,6 +26,8 @@
     <string name="mode_root_only">Root only</string>
     <string name="mode_systemui_only">SystemUI only</string>
     <string name="background_optimization">Background protection</string>
+    <string name="hide_launcher_icon">Hide launcher icon</string>
+    <string name="launcher_icon_write_failed">Could not update launcher icon</string>
     <string name="background_settings">Background settings</string>
     <string name="application_settings">App settings</string>
 </resources>

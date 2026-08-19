@@ -18,6 +18,7 @@ import android.view.WindowInsets;
 import android.widget.CompoundButton;
 import android.widget.Switch;
 import android.widget.TextView;
+import android.widget.Toast;
 
 import java.security.SecureRandom;
 import java.util.Base64;
@@ -81,11 +82,13 @@ public final class SettingsActivity extends Activity {
     };
 
     private SettingsActivityController controller;
+    private LauncherIconController launcherIconController;
     private volatile IForceStopBridge bridge;
     private boolean started;
     private boolean bound;
     private int lifecycleGeneration;
     private boolean renderingSwitch;
+    private boolean renderingLauncherIconSwitch;
     private AlertDialog currentModeDialog;
     private TextView rootStatus;
     private TextView systemUiStatus;
@@ -93,6 +96,7 @@ public final class SettingsActivity extends Activity {
     private TextView lastExecutionStatus;
     private TextView executionModeValue;
     private Switch backgroundOptimizationSwitch;
+    private Switch hideLauncherIconSwitch;
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -106,11 +110,18 @@ public final class SettingsActivity extends Activity {
                 SettingsActivity::newOpenToken,
                 restoredToken,
                 restoredAcknowledged);
+        launcherIconController = new LauncherIconController(this);
         setContentView(R.layout.activity_settings);
         bindViews();
         applySystemBarInsets();
         installListeners();
         renderInitialState();
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+        renderLauncherIconState();
     }
 
     @Override
@@ -184,6 +195,7 @@ public final class SettingsActivity extends Activity {
         executionModeValue = findViewById(R.id.execution_mode_value);
         backgroundOptimizationSwitch = findViewById(
                 R.id.background_optimization_switch);
+        hideLauncherIconSwitch = findViewById(R.id.hide_launcher_icon_switch);
     }
 
     private void applySystemBarInsets() {
@@ -201,6 +213,8 @@ public final class SettingsActivity extends Activity {
                 ignored -> showExecutionModeDialog());
         backgroundOptimizationSwitch.setOnCheckedChangeListener(
                 this::onBackgroundOptimizationChanged);
+        hideLauncherIconSwitch.setOnCheckedChangeListener(
+                (button, hidden) -> onLauncherIconVisibilityChanged(hidden));
         findViewById(R.id.system_settings_row).setOnClickListener(
                 ignored -> openBestAvailableSettings());
         findViewById(R.id.application_settings_row).setOnClickListener(
@@ -216,6 +230,7 @@ public final class SettingsActivity extends Activity {
         renderingSwitch = true;
         backgroundOptimizationSwitch.setChecked(true);
         renderingSwitch = false;
+        renderLauncherIconState();
     }
 
     private void initializeBridge(
@@ -341,6 +356,25 @@ public final class SettingsActivity extends Activity {
             button.setChecked(true);
             renderingSwitch = false;
         }
+    }
+
+    private void onLauncherIconVisibilityChanged(boolean hidden) {
+        if (renderingLauncherIconSwitch) {
+            return;
+        }
+        try {
+            launcherIconController.setVisible(!hidden);
+        } catch (RuntimeException failure) {
+            Toast.makeText(
+                    this, R.string.launcher_icon_write_failed, Toast.LENGTH_SHORT).show();
+            renderLauncherIconState();
+        }
+    }
+
+    private void renderLauncherIconState() {
+        renderingLauncherIconSwitch = true;
+        hideLauncherIconSwitch.setChecked(!launcherIconController.isVisible());
+        renderingLauncherIconSwitch = false;
     }
 
     private void submitConfiguration(ConfigurationWrite write) {
