@@ -31,7 +31,7 @@
 - Modify: `app/build.gradle.kts`
 - Create: `app/src/androidTest/java/com/wayne/statusbarforceclose/InstrumentationSmokeTest.java`
 
-- [ ] Configure `testInstrumentationRunner = "android.test.InstrumentationTestRunner"` and use platform `android.test`/JUnit 3 APIs so the test APK adds no AndroidX dependency or runtime package surface.
+- [ ] Configure `androidx.test.runner.AndroidJUnitRunner` 1.7.0 and AndroidX Test JUnit 1.3.0 as `androidTestImplementation` only; these dependencies stay in the test APK and add no production APK runtime surface.
 - [ ] Add a minimal smoke test that asserts the instrumentation target package is `com.wayne.statusbarforceclose`.
 - [ ] Run `./gradlew assembleDebugAndroidTest --no-daemon`, verify both app and test APKs exist, and inspect the test manifest runner/target package.
 - [ ] Commit `test: establish Android instrumentation runner`.
