@@ -59,6 +59,9 @@ final class BridgeStateStore implements BridgeStateRepository, OptimizationRepos
     public synchronized boolean commitOptimizationJournal(OptimizationJournal journal) {
         BridgeStateSnapshot current = load();
         return commit(new BridgeStateSnapshot(
-                current.configuration(), current.rootJournal(), journal));
+                current.configuration(),
+                current.rootJournal(),
+                journal,
+                current.lastExecution()));
     }
 }

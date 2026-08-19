@@ -29,7 +29,8 @@ public final class BridgeStateCodecTest {
         BridgeStateSnapshot snapshot = new BridgeStateSnapshot(
                 ForceStopConfiguration.bridgeDefaults().update(ExecutionMode.SYSTEM_UI_FIRST, false),
                 journal,
-                optimization);
+                optimization,
+                LastExecutionRecord.successful(BackendKind.SYSTEM_UI, 37L));
 
         BridgeStateSnapshot decoded = BridgeStateCodec.decode(
                 BridgeStateCodec.encode(snapshot), 7L);
@@ -43,6 +44,22 @@ public final class BridgeStateCodecTest {
 
         assertEquals(ForceStopConfiguration.bridgeDefaults(), decoded.configuration());
         assertEquals(RootAttemptJournal.initial(7L), decoded.rootJournal());
+        assertEquals(LastExecutionRecord.none(), decoded.lastExecution());
+    }
+
+    @Test
+    public void schemaTwoMigratesWithoutInventingAnExecution() {
+        Map<String, Object> legacy = new HashMap<>(BridgeStateCodec.encode(
+                new BridgeStateSnapshot(
+                        ForceStopConfiguration.bridgeDefaults(),
+                        RootAttemptJournal.initial(7L))));
+        legacy.put("schema_version", 2);
+        legacy.keySet().removeIf(key -> key.startsWith("last_execution_"));
+
+        BridgeStateSnapshot decoded = BridgeStateCodec.decode(legacy, 7L);
+
+        assertTrue(decoded.configuration().isUsable());
+        assertEquals(LastExecutionRecord.none(), decoded.lastExecution());
     }
 
     @Test

@@ -177,6 +177,94 @@ public final class BridgeRequestDispatcherTest {
     }
 
     @Test
+    public void moduleConfigurationReadIsModuleOnly() {
+        Fixture fixture = fixture();
+
+        assertEquals(
+                fixture.repository.snapshot.configuration(),
+                fixture.dispatcher.getModuleConfiguration(MODULE, BridgeProtocol.VERSION));
+        assertEquals(
+                ForceStopConfiguration.unconfigured(),
+                fixture.dispatcher.getModuleConfiguration(ATTACKER, BridgeProtocol.VERSION));
+        assertEquals(
+                ForceStopConfiguration.unconfigured(),
+                fixture.dispatcher.getModuleConfiguration(
+                        MODULE, BridgeProtocol.VERSION + 1));
+    }
+
+    @Test
+    public void authenticatedSystemUiReportsCapabilityAndSuccessfulExecutionOnly() {
+        Fixture fixture = fixture();
+        List<BridgeRuntimeState> observed = new ArrayList<>();
+        fixture.dispatcher.registerRuntimeObserver(
+                MODULE, BridgeProtocol.VERSION, "observer-a", observed::add);
+        SystemUiRegistration registration = fixture.dispatcher.registerSystemUi(
+                SYSTEM_UI, BridgeProtocol.VERSION, "generation-a", ignored -> { });
+
+        assertEquals(BridgeProtocol.Status.OK, fixture.dispatcher.reportSystemUiCapability(
+                SYSTEM_UI,
+                BridgeProtocol.VERSION,
+                "generation-a",
+                registration.sessionToken(),
+                SystemUiCapability.AVAILABLE));
+        assertEquals(BridgeProtocol.Status.OK, fixture.dispatcher.reportExecutionResult(
+                SYSTEM_UI,
+                BridgeProtocol.VERSION,
+                "generation-a",
+                registration.sessionToken(),
+                BackendKind.ROOT,
+                BackendStatus.SUCCESS,
+                23L));
+
+        BridgeRuntimeState current = observed.get(observed.size() - 1);
+        assertEquals(SystemUiCapability.AVAILABLE, current.systemUiCapability());
+        assertEquals(LastExecutionRecord.successful(BackendKind.ROOT, 23L),
+                current.lastExecution());
+        assertEquals(current.lastExecution(), fixture.repository.snapshot.lastExecution());
+
+        assertEquals(BridgeProtocol.Status.OK, fixture.dispatcher.reportExecutionResult(
+                SYSTEM_UI,
+                BridgeProtocol.VERSION,
+                "generation-a",
+                registration.sessionToken(),
+                BackendKind.SYSTEM_UI,
+                BackendStatus.OPERATION_FAILED,
+                99L));
+        assertEquals(LastExecutionRecord.successful(BackendKind.ROOT, 23L),
+                fixture.repository.snapshot.lastExecution());
+    }
+
+    @Test
+    public void runtimeReportsRejectStaleOrNonSystemUiCallers() {
+        Fixture fixture = fixture();
+        SystemUiRegistration registration = fixture.dispatcher.registerSystemUi(
+                SYSTEM_UI, BridgeProtocol.VERSION, "generation-a", ignored -> { });
+
+        for (CallerIdentity caller : List.of(MODULE, ATTACKER)) {
+            assertEquals(BridgeProtocol.Status.PERMISSION_REJECTED,
+                    fixture.dispatcher.reportSystemUiCapability(
+                            caller,
+                            BridgeProtocol.VERSION,
+                            "generation-a",
+                            registration.sessionToken(),
+                            SystemUiCapability.AVAILABLE));
+        }
+        assertEquals(BridgeProtocol.Status.PERMISSION_REJECTED,
+                fixture.dispatcher.reportExecutionResult(
+                        SYSTEM_UI,
+                        BridgeProtocol.VERSION,
+                        "generation-a",
+                        "stale-token",
+                        BackendKind.ROOT,
+                        BackendStatus.SUCCESS,
+                        4L));
+        assertEquals(SystemUiCapability.UNKNOWN,
+                fixture.dispatcher.getRuntimeState(MODULE, BridgeProtocol.VERSION)
+                        .systemUiCapability());
+        assertEquals(LastExecutionRecord.none(), fixture.repository.snapshot.lastExecution());
+    }
+
+    @Test
     public void freshSettingsTokenAndRecoveryAreAuthorizedAndIdempotent() {
         Fixture fixture = fixture();
         assertEquals(BridgeProtocol.Status.OK, fixture.dispatcher.requestRootForSettings(

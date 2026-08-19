@@ -35,4 +35,14 @@ interface IForceStopBridge {
     BridgeRuntimeStateParcel getRuntimeState(int protocol);
     BridgeRuntimeStateParcel getSystemUiRuntimeState(
             int protocol, String generation, String sessionToken);
+    BridgeConfigurationParcel getModuleConfiguration(int protocol);
+    int reportSystemUiCapability(
+            int protocol, String generation, String sessionToken, int capability);
+    int reportExecutionResult(
+            int protocol,
+            String generation,
+            String sessionToken,
+            int backend,
+            int status,
+            long elapsedMillis);
 }

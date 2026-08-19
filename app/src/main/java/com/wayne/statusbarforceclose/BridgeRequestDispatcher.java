@@ -20,6 +20,7 @@ final class BridgeRequestDispatcher {
     private final Set<String> consumedRecoveryWindows = new HashSet<>();
     private final AtomicLong callbackIds = new AtomicLong();
     private BridgeStateSnapshot state;
+    private SystemUiCapability systemUiCapability = SystemUiCapability.UNKNOWN;
 
     BridgeRequestDispatcher(
             int moduleUid,
@@ -80,7 +81,10 @@ final class BridgeRequestDispatcher {
                 .consumeSystemUiGeneration(generation);
         if (trigger.journal() != state.rootJournal()) {
             BridgeStateSnapshot updated = new BridgeStateSnapshot(
-                    state.configuration(), trigger.journal(), state.optimizationJournal());
+                    state.configuration(),
+                    trigger.journal(),
+                    state.optimizationJournal(),
+                    state.lastExecution());
             if (!repository.commit(updated)) {
                 systemUiCallbacks.remove(callbackId);
                 systemUiRuntimeCallbacks.remove(callbackId);
@@ -151,6 +155,15 @@ final class BridgeRequestDispatcher {
         return state.configuration();
     }
 
+    synchronized ForceStopConfiguration getModuleConfiguration(
+            CallerIdentity caller, int protocol) {
+        if (authorizeModule(caller, protocol) != BridgeProtocol.Status.OK) {
+            return ForceStopConfiguration.unconfigured();
+        }
+        refreshState();
+        return state.configuration();
+    }
+
     synchronized BackendResult forceStopRoot(
             CallerIdentity caller,
             int protocol,
@@ -171,6 +184,58 @@ final class BridgeRequestDispatcher {
         return rootOperations.forceStop(packageName, userId, waitForConnection);
     }
 
+    synchronized BridgeProtocol.Status reportSystemUiCapability(
+            CallerIdentity caller,
+            int protocol,
+            String generation,
+            String sessionToken,
+            SystemUiCapability capability) {
+        BridgeProtocol.Status authorization = authorizeSystemUiReport(
+                caller, protocol, generation, sessionToken);
+        if (authorization != BridgeProtocol.Status.OK) {
+            return authorization;
+        }
+        if (capability == null || capability == SystemUiCapability.UNKNOWN) {
+            return BridgeProtocol.Status.INVALID_ARGUMENT;
+        }
+        systemUiCapability = capability;
+        notifyRuntimeObservers();
+        return BridgeProtocol.Status.OK;
+    }
+
+    synchronized BridgeProtocol.Status reportExecutionResult(
+            CallerIdentity caller,
+            int protocol,
+            String generation,
+            String sessionToken,
+            BackendKind backend,
+            BackendStatus status,
+            long elapsedMillis) {
+        BridgeProtocol.Status authorization = authorizeSystemUiReport(
+                caller, protocol, generation, sessionToken);
+        if (authorization != BridgeProtocol.Status.OK) {
+            return authorization;
+        }
+        if (backend == null || status == null || elapsedMillis < 0L) {
+            return BridgeProtocol.Status.INVALID_ARGUMENT;
+        }
+        if (status != BackendStatus.SUCCESS) {
+            return BridgeProtocol.Status.OK;
+        }
+        refreshState();
+        BridgeStateSnapshot updated = new BridgeStateSnapshot(
+                state.configuration(),
+                state.rootJournal(),
+                state.optimizationJournal(),
+                LastExecutionRecord.successful(backend, elapsedMillis));
+        if (!repository.commit(updated)) {
+            return BridgeProtocol.Status.STORAGE_ERROR;
+        }
+        state = updated;
+        notifyRuntimeObservers();
+        return BridgeProtocol.Status.OK;
+    }
+
     synchronized BridgeProtocol.Status updateConfiguration(
             CallerIdentity caller,
             int protocol,
@@ -189,7 +254,10 @@ final class BridgeRequestDispatcher {
         ForceStopConfiguration updatedConfiguration = state.configuration().update(
                 mode, backgroundOptimizationEnabled);
         BridgeStateSnapshot updated = new BridgeStateSnapshot(
-                updatedConfiguration, state.rootJournal(), state.optimizationJournal());
+                updatedConfiguration,
+                state.rootJournal(),
+                state.optimizationJournal(),
+                state.lastExecution());
         if (!repository.commit(updated)) {
             return BridgeProtocol.Status.STORAGE_ERROR;
         }
@@ -224,7 +292,10 @@ final class BridgeRequestDispatcher {
             return BridgeProtocol.Status.OK;
         }
         BridgeStateSnapshot updated = new BridgeStateSnapshot(
-                state.configuration(), trigger.journal(), state.optimizationJournal());
+                state.configuration(),
+                trigger.journal(),
+                state.optimizationJournal(),
+                state.lastExecution());
         if (!repository.commit(updated)) {
             return BridgeProtocol.Status.STORAGE_ERROR;
         }
@@ -315,7 +386,10 @@ final class BridgeRequestDispatcher {
         refreshState();
         RootAttemptJournal updatedJournal = state.rootJournal().recordTerminal(terminalState);
         BridgeStateSnapshot updated = new BridgeStateSnapshot(
-                state.configuration(), updatedJournal, state.optimizationJournal());
+                state.configuration(),
+                updatedJournal,
+                state.optimizationJournal(),
+                state.lastExecution());
         if (!repository.commit(updated)) {
             throw new IllegalStateException("Failed to persist terminal root state");
         }
@@ -342,6 +416,19 @@ final class BridgeRequestDispatcher {
                 : BridgeProtocol.Status.PERMISSION_REJECTED;
     }
 
+    private BridgeProtocol.Status authorizeSystemUiReport(
+            CallerIdentity caller,
+            int protocol,
+            String generation,
+            String sessionToken) {
+        if (protocol != BridgeProtocol.VERSION) {
+            return BridgeProtocol.Status.INCOMPATIBLE;
+        }
+        return authorizedSystemUi(caller, protocol, generation, sessionToken)
+                ? BridgeProtocol.Status.OK
+                : BridgeProtocol.Status.PERMISSION_REJECTED;
+    }
+
     private static boolean isSystemUi(CallerIdentity caller) {
         return caller != null && RootBridgeCallerPolicy.isSystemUi(caller.packages());
     }
@@ -350,11 +437,18 @@ final class BridgeRequestDispatcher {
         return new BridgeRuntimeState(
                 rootOperations.state(),
                 sessionRegistry.hasActiveSession(),
-                state.configuration().backgroundOptimizationEnabled());
+                state.configuration().backgroundOptimizationEnabled(),
+                systemUiCapability,
+                state.lastExecution());
     }
 
     private static BridgeRuntimeState rejectedRuntimeState() {
-        return new BridgeRuntimeState(RootConnectionState.INCOMPATIBLE, false, false);
+        return new BridgeRuntimeState(
+                RootConnectionState.INCOMPATIBLE,
+                false,
+                false,
+                SystemUiCapability.UNKNOWN,
+                LastExecutionRecord.none());
     }
 
     private void notifyRuntimeObservers() {

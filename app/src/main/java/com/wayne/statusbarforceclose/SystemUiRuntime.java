@@ -191,13 +191,23 @@ final class SystemUiRuntime {
                         waitForConnection);
         ForceStopMethod classifiedSystemUiMethod =
                 (targetPackage, targetUser, waitForConnection) -> {
+                    SystemUiCapability previousCapability = capabilityClassifier.capability();
                     BackendResult result = localSystemUiMethod.forceStop(
                             targetPackage, targetUser, false);
                     capabilityClassifier.record(result.status());
+                    SystemUiCapability currentCapability = capabilityClassifier.capability();
+                    if (currentCapability != previousCapability) {
+                        recoveryWorker.execute(() -> reportCapability(
+                                activeBridge, snapshot, currentCapability));
+                    }
                     return result;
                 };
-        return new ForceStopCoordinator(rootMethod, classifiedSystemUiMethod)
+        ForceStopResult result = new ForceStopCoordinator(rootMethod, classifiedSystemUiMethod)
                 .forceStop(plan, packageName, userId);
+        if (result.isSuccess()) {
+            recoveryWorker.execute(() -> reportExecution(activeBridge, snapshot, result));
+        }
+        return result;
     }
 
     private BackendResult forceStopRoot(
@@ -304,6 +314,8 @@ final class SystemUiRuntime {
                 bridge = candidate;
             }
             reconnectBackoff.reset();
+            reportCapability(
+                    candidate, connection.snapshot(), capabilityClassifier.capability());
             refreshRootStateAndFlush(candidate);
             logger.info("systemui_bridge_ready", "component=" + name
                     + " generation=" + connection.generation()
@@ -426,6 +438,64 @@ final class SystemUiRuntime {
                     + connection.generation(), failure);
             notifyConnectionFailure(expectedBridge);
         }
+    }
+
+    private void reportCapability(
+            IForceStopBridge expectedBridge,
+            SystemUiConnectionSnapshot snapshot,
+            SystemUiCapability capability) {
+        if (!isCurrentSession(expectedBridge, snapshot)) {
+            return;
+        }
+        try {
+            BridgeProtocol.Status status = protocolStatus(
+                    expectedBridge.reportSystemUiCapability(
+                            BridgeProtocol.VERSION,
+                            connection.generation(),
+                            snapshot.sessionToken(),
+                            capability.ordinal()));
+            logger.info("systemui_capability_reported", "capability=" + capability
+                    + " status=" + status);
+        } catch (Throwable failure) {
+            logger.error("systemui_capability_report_failed", "capability=" + capability,
+                    failure);
+        }
+    }
+
+    private void reportExecution(
+            IForceStopBridge expectedBridge,
+            SystemUiConnectionSnapshot snapshot,
+            ForceStopResult result) {
+        if (!result.isSuccess()
+                || result.backend() == null
+                || !isCurrentSession(expectedBridge, snapshot)) {
+            return;
+        }
+        try {
+            BridgeProtocol.Status status = protocolStatus(expectedBridge.reportExecutionResult(
+                    BridgeProtocol.VERSION,
+                    connection.generation(),
+                    snapshot.sessionToken(),
+                    result.backend().ordinal(),
+                    result.status().ordinal(),
+                    result.elapsedMillis()));
+            logger.info("systemui_execution_reported", "backend=" + result.backend()
+                    + " elapsedMs=" + result.elapsedMillis() + " status=" + status);
+        } catch (Throwable failure) {
+            logger.error("systemui_execution_report_failed", "backend=" + result.backend(),
+                    failure);
+        }
+    }
+
+    private synchronized boolean isCurrentSession(
+            IForceStopBridge expectedBridge, SystemUiConnectionSnapshot expectedSnapshot) {
+        SystemUiConnectionSnapshot current = connection.snapshot();
+        return bridge == expectedBridge
+                && expectedBridge != null
+                && expectedSnapshot.state() == SystemUiBridgeState.READY
+                && current.state() == SystemUiBridgeState.READY
+                && java.util.Objects.equals(
+                        expectedSnapshot.sessionToken(), current.sessionToken());
     }
 
     private void flushPendingRecovery() {

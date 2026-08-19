@@ -179,6 +179,41 @@ public final class ForceStopBridgeService extends Service {
             return BridgeRuntimeStateParcel.fromModel(dispatcher.getSystemUiRuntimeState(
                     callerIdentity(), protocol, generation, sessionToken));
         }
+
+        @Override
+        public BridgeConfigurationParcel getModuleConfiguration(int protocol) {
+            return BridgeConfigurationParcel.fromModel(
+                    dispatcher.getModuleConfiguration(callerIdentity(), protocol));
+        }
+
+        @Override
+        public int reportSystemUiCapability(
+                int protocol, String generation, String sessionToken, int capability) {
+            return dispatcher.reportSystemUiCapability(
+                    callerIdentity(),
+                    protocol,
+                    generation,
+                    sessionToken,
+                    enumValue(SystemUiCapability.values(), capability)).ordinal();
+        }
+
+        @Override
+        public int reportExecutionResult(
+                int protocol,
+                String generation,
+                String sessionToken,
+                int backend,
+                int status,
+                long elapsedMillis) {
+            return dispatcher.reportExecutionResult(
+                    callerIdentity(),
+                    protocol,
+                    generation,
+                    sessionToken,
+                    enumValue(BackendKind.values(), backend),
+                    enumValue(BackendStatus.values(), status),
+                    elapsedMillis).ordinal();
+        }
     };
 
     @Override

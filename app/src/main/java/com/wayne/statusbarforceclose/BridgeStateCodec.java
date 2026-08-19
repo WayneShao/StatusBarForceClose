@@ -5,7 +5,8 @@ import java.util.Map;
 import java.util.Objects;
 
 final class BridgeStateCodec {
-    private static final int SCHEMA_VERSION = 2;
+    private static final int SCHEMA_VERSION = 3;
+    private static final int LEGACY_SCHEMA_VERSION = 2;
     private static final String SCHEMA = "schema_version";
     private static final String CONFIGURATION_STATE = "configuration_state";
     private static final String EXECUTION_MODE = "execution_mode";
@@ -25,6 +26,8 @@ final class BridgeStateCodec {
     private static final String OPTIMIZATION_PHASE = "optimization_phase";
     private static final String OPTIMIZATION_PENDING_ACTION = "optimization_pending_action";
     private static final String OPTIMIZATION_PENDING_ITEM = "optimization_pending_item";
+    private static final String LAST_EXECUTION_BACKEND = "last_execution_backend";
+    private static final String LAST_EXECUTION_ELAPSED = "last_execution_elapsed_ms";
 
     private BridgeStateCodec() {
     }
@@ -74,6 +77,11 @@ final class BridgeStateCodec {
             encoded.put(prefix + "changed", itemState.changedByModule());
             encoded.put(prefix + "resolution", itemState.resolution().name());
         }
+        LastExecutionRecord lastExecution = snapshot.lastExecution();
+        if (lastExecution.isPresent()) {
+            encoded.put(LAST_EXECUTION_BACKEND, lastExecution.backend().name());
+            encoded.put(LAST_EXECUTION_ELAPSED, lastExecution.elapsedMillis());
+        }
         return Map.copyOf(encoded);
     }
 
@@ -86,7 +94,9 @@ final class BridgeStateCodec {
             return defaults(currentApkVersionCode);
         }
         try {
-            if (requiredInt(encoded, SCHEMA) != SCHEMA_VERSION) {
+            int schemaVersion = requiredInt(encoded, SCHEMA);
+            if (schemaVersion != SCHEMA_VERSION
+                    && schemaVersion != LEGACY_SCHEMA_VERSION) {
                 return failClosed(currentApkVersionCode);
             }
             ConfigurationState configurationState = ConfigurationState.valueOf(
@@ -141,10 +151,22 @@ final class BridgeStateCodec {
                     pendingAction,
                     pendingItem,
                     optimizationItems);
+            LastExecutionRecord lastExecution = LastExecutionRecord.none();
+            if (schemaVersion == SCHEMA_VERSION) {
+                String backendName = optionalString(encoded, LAST_EXECUTION_BACKEND);
+                if (backendName != null) {
+                    lastExecution = LastExecutionRecord.successful(
+                            BackendKind.valueOf(backendName),
+                            requiredLong(encoded, LAST_EXECUTION_ELAPSED));
+                } else if (encoded.containsKey(LAST_EXECUTION_ELAPSED)) {
+                    throw new IllegalArgumentException("Execution elapsed without backend");
+                }
+            }
             return new BridgeStateSnapshot(
                     configuration,
                     journal.forApkVersion(currentApkVersionCode),
-                    optimization);
+                    optimization,
+                    lastExecution);
         } catch (RuntimeException ignored) {
             return failClosed(currentApkVersionCode);
         }
@@ -154,7 +176,8 @@ final class BridgeStateCodec {
         return new BridgeStateSnapshot(
                 ForceStopConfiguration.bridgeDefaults(),
                 RootAttemptJournal.initial(currentApkVersionCode),
-                OptimizationJournal.initial());
+                OptimizationJournal.initial(),
+                LastExecutionRecord.none());
     }
 
     private static BridgeStateSnapshot failClosed(long currentApkVersionCode) {
@@ -162,7 +185,8 @@ final class BridgeStateCodec {
                 ForceStopConfiguration.unconfigured(),
                 RootAttemptJournal.initial(currentApkVersionCode)
                         .recordTerminal(RootConnectionState.INCOMPATIBLE),
-                OptimizationJournal.initial());
+                OptimizationJournal.initial(),
+                LastExecutionRecord.none());
     }
 
     private static void putIfPresent(Map<String, Object> target, String key, String value) {
