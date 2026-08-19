@@ -10,10 +10,20 @@ final class RootAttemptStateMachine {
     private long deadlineMillis = NO_ATTEMPT;
 
     RootAttemptStateMachine(long timeoutMillis) {
+        this(timeoutMillis, RootConnectionState.DISCONNECTED);
+    }
+
+    RootAttemptStateMachine(long timeoutMillis, RootConnectionState initialState) {
         if (timeoutMillis <= 0L) {
             throw new IllegalArgumentException("timeoutMillis must be positive");
         }
+        if (initialState != RootConnectionState.DISCONNECTED
+                && initialState != RootConnectionState.DENIED
+                && initialState != RootConnectionState.INCOMPATIBLE) {
+            throw new IllegalArgumentException("Invalid durable initial root state");
+        }
         this.timeoutMillis = timeoutMillis;
+        state = initialState;
     }
 
     synchronized RootConnectionState state() {

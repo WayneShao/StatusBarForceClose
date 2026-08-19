@@ -3,14 +3,18 @@ package com.wayne.statusbarforceclose;
 import android.app.Service;
 import android.content.Intent;
 import android.os.Binder;
+import android.os.Handler;
 import android.os.IBinder;
+import android.os.Looper;
 import android.os.RemoteException;
+import android.os.SystemClock;
 import android.util.Log;
 
 import java.security.SecureRandom;
 import java.util.Base64;
 import java.util.IdentityHashMap;
 import java.util.Map;
+import java.util.concurrent.atomic.AtomicReference;
 
 public final class ForceStopBridgeService extends Service {
     private static final String TAG = "StatusBarForceClose";
@@ -22,7 +26,9 @@ public final class ForceStopBridgeService extends Service {
     private final Map<IRuntimeObserver, IBinder.DeathRecipient> runtimeObservers =
             new IdentityHashMap<>();
     private final DiagnosticLogger logger = this::report;
+    private final Handler mainHandler = new Handler(Looper.getMainLooper());
     private BridgeRequestDispatcher dispatcher;
+    private RootConnectionManager rootConnectionManager;
 
     private final IForceStopBridge.Stub bridge = new IForceStopBridge.Stub() {
         @Override
@@ -178,12 +184,48 @@ public final class ForceStopBridgeService extends Service {
             versionCode = 0L;
             logger.error("bridge_version_lookup_failed", "package=" + getPackageName(), failure);
         }
+        BridgeStateStore stateStore = new BridgeStateStore(this, versionCode);
+        BridgeStateSnapshot initialState = stateStore.load();
+        AtomicReference<BridgeRequestDispatcher> dispatcherReference = new AtomicReference<>();
+        RootConnectionState durableRootState = initialState.rootJournal().terminalState() == null
+                ? RootConnectionState.DISCONNECTED
+                : initialState.rootJournal().terminalState();
+        rootConnectionManager = new RootConnectionManager(
+                new LibsuRootBindAdapter(this, logger),
+                SystemClock::elapsedRealtime,
+                (deadline, action) -> mainHandler.postDelayed(
+                        action, Math.max(0L, deadline - SystemClock.elapsedRealtime())),
+                action -> {
+                    if (Looper.myLooper() == Looper.getMainLooper()) {
+                        action.run();
+                    } else {
+                        mainHandler.post(action);
+                    }
+                },
+                terminalState -> {
+                    BridgeRequestDispatcher active = dispatcherReference.get();
+                    if (active != null) {
+                        active.recordRootTerminal(terminalState);
+                    }
+                },
+                10_000L,
+                durableRootState,
+                () -> {
+                    BridgeRequestDispatcher active = dispatcherReference.get();
+                    if (active != null) {
+                        active.onRootStateChanged();
+                    }
+                });
         dispatcher = new BridgeRequestDispatcher(
                 getApplicationInfo().uid,
-                new BridgeStateStore(this, versionCode),
-                RootOperations.unavailable(),
+                stateStore,
+                rootConnectionManager,
                 OptimizationOperations.unavailable(),
                 new SystemUiSessionRegistry(BridgeProtocol.VERSION, this::newSessionToken));
+        dispatcherReference.set(dispatcher);
+        if (durableRootState == RootConnectionState.DISCONNECTED) {
+            rootConnectionManager.requestFreshConnection();
+        }
         logger.info("bridge_service_created", "pid=" + android.os.Process.myPid()
                 + " uid=" + android.os.Process.myUid() + " protocol=" + BridgeProtocol.VERSION);
     }

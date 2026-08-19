@@ -277,6 +277,20 @@ final class BridgeRequestDispatcher {
                         RootConnectionState.INCOMPATIBLE, false, false);
     }
 
+    synchronized void recordRootTerminal(RootConnectionState terminalState) {
+        RootAttemptJournal updatedJournal = state.rootJournal().recordTerminal(terminalState);
+        BridgeStateSnapshot updated = new BridgeStateSnapshot(
+                state.configuration(), updatedJournal);
+        if (!repository.commit(updated)) {
+            throw new IllegalStateException("Failed to persist terminal root state");
+        }
+        state = updated;
+    }
+
+    synchronized void onRootStateChanged() {
+        notifyRuntimeObservers();
+    }
+
     private boolean authorizedSystemUi(
             CallerIdentity caller, int protocol, String generation, String sessionToken) {
         return isSystemUi(caller)
