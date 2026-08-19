@@ -13,6 +13,8 @@ final class BridgeRequestDispatcher {
     private final SystemUiSessionRegistry sessionRegistry;
     private final BridgeObserverRegistry<ForceStopConfiguration> systemUiCallbacks =
             new BridgeObserverRegistry<>();
+    private final BridgeObserverRegistry<BridgeRuntimeState> systemUiRuntimeCallbacks =
+            new BridgeObserverRegistry<>();
     private final BridgeObserverRegistry<BridgeRuntimeState> runtimeObservers =
             new BridgeObserverRegistry<>();
     private final Set<String> consumedRecoveryWindows = new HashSet<>();
@@ -42,13 +44,22 @@ final class BridgeRequestDispatcher {
             int protocol,
             String generation,
             SystemUiConfigurationCallback callback) {
+        return registerSystemUi(caller, protocol, generation, callback, ignored -> { });
+    }
+
+    synchronized SystemUiRegistration registerSystemUi(
+            CallerIdentity caller,
+            int protocol,
+            String generation,
+            SystemUiConfigurationCallback callback,
+            RuntimeStateObserver runtimeCallback) {
         if (!isSystemUi(caller)) {
             return SystemUiRegistration.rejected(BridgeProtocol.Status.PERMISSION_REJECTED);
         }
         if (protocol != BridgeProtocol.VERSION) {
             return SystemUiRegistration.rejected(BridgeProtocol.Status.INCOMPATIBLE);
         }
-        if (isBlank(generation) || callback == null) {
+        if (isBlank(generation) || callback == null || runtimeCallback == null) {
             return SystemUiRegistration.rejected(BridgeProtocol.Status.INVALID_ARGUMENT);
         }
         refreshState();
@@ -60,8 +71,10 @@ final class BridgeRequestDispatcher {
         }
         if (registration.replacedCallbackId() != null) {
             systemUiCallbacks.remove(registration.replacedCallbackId());
+            systemUiRuntimeCallbacks.remove(registration.replacedCallbackId());
         }
         systemUiCallbacks.register(callbackId, callback::onConfiguration);
+        systemUiRuntimeCallbacks.register(callbackId, runtimeCallback::onRuntimeState);
 
         RootAttemptJournal.TriggerResult trigger = state.rootJournal()
                 .consumeSystemUiGeneration(generation);
@@ -70,6 +83,7 @@ final class BridgeRequestDispatcher {
                     state.configuration(), trigger.journal(), state.optimizationJournal());
             if (!repository.commit(updated)) {
                 systemUiCallbacks.remove(callbackId);
+                systemUiRuntimeCallbacks.remove(callbackId);
                 sessionRegistry.unregister(registration.sessionToken());
                 return SystemUiRegistration.rejected(BridgeProtocol.Status.STORAGE_ERROR);
             }
@@ -79,6 +93,7 @@ final class BridgeRequestDispatcher {
             callback.onConfiguration(state.configuration());
         } catch (RuntimeException failure) {
             systemUiCallbacks.remove(callbackId);
+            systemUiRuntimeCallbacks.remove(callbackId);
             sessionRegistry.unregister(registration.sessionToken());
             return SystemUiRegistration.rejected(BridgeProtocol.Status.OPERATION_FAILED);
         }
@@ -97,8 +112,9 @@ final class BridgeRequestDispatcher {
 
     synchronized boolean onSystemUiCallbackDied(String callbackId) {
         boolean removed = systemUiCallbacks.remove(callbackId);
+        boolean runtimeRemoved = systemUiRuntimeCallbacks.remove(callbackId);
         boolean invalidated = sessionRegistry.onCallbackDied(callbackId);
-        if (removed || invalidated) {
+        if (removed || runtimeRemoved || invalidated) {
             notifyRuntimeObservers();
         }
         return invalidated;
@@ -118,6 +134,7 @@ final class BridgeRequestDispatcher {
         }
         sessionRegistry.unregister(sessionToken);
         systemUiCallbacks.remove(callbackId);
+        systemUiRuntimeCallbacks.remove(callbackId);
         notifyRuntimeObservers();
         return BridgeProtocol.Status.OK;
     }
@@ -341,7 +358,9 @@ final class BridgeRequestDispatcher {
     }
 
     private void notifyRuntimeObservers() {
-        runtimeObservers.notifyObservers(runtimeState());
+        BridgeRuntimeState runtimeState = runtimeState();
+        runtimeObservers.notifyObservers(runtimeState);
+        systemUiRuntimeCallbacks.notifyObservers(runtimeState);
     }
 
     private static BackendResult rootResult(BackendStatus status) {

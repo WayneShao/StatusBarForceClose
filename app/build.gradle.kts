@@ -73,6 +73,7 @@ android {
 }
 
 dependencies {
+    compileOnly(project(":hidden-api-stubs"))
     implementation("com.github.topjohnwu.libsu:core:6.0.0")
     implementation("com.github.topjohnwu.libsu:service:6.0.0")
     implementation("org.lsposed.hiddenapibypass:hiddenapibypass:6.1")

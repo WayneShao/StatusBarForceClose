@@ -43,7 +43,8 @@ public final class ForceStopBridgeService extends Service {
                     caller,
                     protocol,
                     generation,
-                    configuration -> deliverConfiguration(callback, configuration));
+                    configuration -> deliverConfiguration(callback, configuration),
+                    state -> deliverSystemUiRuntimeState(callback, state));
             if (registration.status() == BridgeProtocol.Status.OK) {
                 unlinkSystemUiCallbackById(registration.replacedCallbackId());
                 linkSystemUiCallback(callback, registration);
@@ -381,6 +382,15 @@ public final class ForceStopBridgeService extends Service {
             observer.onRuntimeStateChanged(BridgeRuntimeStateParcel.fromModel(state));
         } catch (RemoteException failure) {
             throw new IllegalStateException("Runtime observer is unavailable", failure);
+        }
+    }
+
+    private static void deliverSystemUiRuntimeState(
+            ISystemUiCallback callback, BridgeRuntimeState state) {
+        try {
+            callback.onRuntimeStateChanged(BridgeRuntimeStateParcel.fromModel(state));
+        } catch (RemoteException failure) {
+            throw new IllegalStateException("SystemUI runtime callback is unavailable", failure);
         }
     }
 

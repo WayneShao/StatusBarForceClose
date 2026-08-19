@@ -9,6 +9,9 @@ import android.os.IBinder;
 import android.os.Looper;
 import android.os.RemoteException;
 
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
+
 final class SystemUiRuntime {
     private static final String MODULE_PACKAGE = "com.wayne.statusbarforceclose";
     private final DiagnosticLogger logger;
@@ -19,8 +22,14 @@ final class SystemUiRuntime {
             new SystemUiConnectionStateMachine();
     private final ConfigurationDelivery configurationDelivery = new ConfigurationDelivery();
     private final ReconnectBackoff reconnectBackoff =
-            new ReconnectBackoff(1_000L, 16_000L, 5);
+            new ReconnectBackoff(1_000L, 1_000L, 1);
     private final Handler mainHandler = new Handler(Looper.getMainLooper());
+    private final ExecutorService recoveryWorker = Executors.newSingleThreadExecutor(runnable -> {
+        Thread thread = new Thread(runnable, "StatusBarForceClose-Recovery");
+        thread.setDaemon(true);
+        return thread;
+    });
+    private final RecoveryEventController recoveryController;
 
     private Context context;
     private IForceStopBridge bridge;
@@ -28,6 +37,10 @@ final class SystemUiRuntime {
     private IBinder.DeathRecipient deathRecipient;
     private boolean bound;
     private boolean reconnectScheduled;
+    private RecoveryEventRegistrar recoveryEventRegistrar;
+    private volatile RootConnectionState lastRootState = RootConnectionState.DISCONNECTED;
+    private volatile boolean rootStateFresh;
+    private RecoveryRequest pendingRecovery;
 
     private final ISystemUiCallback configurationCallback = new ISystemUiCallback.Stub() {
         @Override
@@ -45,12 +58,38 @@ final class SystemUiRuntime {
                 logger.error("systemui_config_invalid", "revision=" + parcel.revision, invalid);
             }
         }
+
+        @Override
+        public void onRuntimeStateChanged(BridgeRuntimeStateParcel parcel) {
+            if (parcel == null) {
+                logger.warn("systemui_runtime_state_ignored", "reason=null-parcel");
+                return;
+            }
+            try {
+                BridgeRuntimeState state = parcel.toModel();
+                if (!state.systemUiConnected()) {
+                    logger.warn("systemui_runtime_state_ignored", "reason=session-not-connected");
+                    return;
+                }
+                lastRootState = state.rootState();
+                rootStateFresh = true;
+                logger.info("systemui_runtime_state_received", "root=" + state.rootState());
+                if (!state.rootState().isRecoverable()) {
+                    clearPendingRecovery();
+                } else {
+                    recoveryWorker.execute(SystemUiRuntime.this::flushPendingRecovery);
+                }
+            } catch (RuntimeException invalid) {
+                logger.error("systemui_runtime_state_invalid", "rootState="
+                        + parcel.rootState, invalid);
+            }
+        }
     };
 
     private final ServiceConnection serviceConnection = new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
-            registerConnectedBridge(name, service);
+            beginBridgeRegistration(name, service);
         }
 
         @Override
@@ -73,6 +112,14 @@ final class SystemUiRuntime {
         this.logger = logger;
         this.localSystemUiMethod = localSystemUiMethod;
         capabilityClassifier = new SystemUiCapabilityClassifier(this::isLocalSystemUiAvailable);
+        recoveryController = new RecoveryEventController(
+                android.os.SystemClock::elapsedRealtime,
+                (deadline, action) -> mainHandler.postDelayed(
+                        action,
+                        Math.max(0L, deadline - android.os.SystemClock.elapsedRealtime())),
+                this::recoveryRootState,
+                this::requestRecovery,
+                new RecoveryGate(5_000L));
     }
 
     void ensureStarted(Context candidate) {
@@ -92,7 +139,10 @@ final class SystemUiRuntime {
                 reconnectBackoff.reset();
             }
         }
-        runOnMain(this::bindIfNeeded);
+        runOnMain(() -> {
+            installRecoveryEventsIfNeeded();
+            bindIfNeeded();
+        });
     }
 
     ForceStopResult forceStop(String packageName, int userId) {
@@ -111,12 +161,19 @@ final class SystemUiRuntime {
                         connection.generation(),
                         snapshot.sessionToken());
                 if (state != null) {
-                    rootState = state.toModel().rootState();
+                    BridgeRuntimeState model = state.toModel();
+                    if (model.systemUiConnected()) {
+                        rootState = model.rootState();
+                        lastRootState = rootState;
+                        rootStateFresh = true;
+                    } else {
+                        notifyConnectionFailure(activeBridge);
+                    }
                 }
             } catch (Throwable failure) {
                 logger.error("systemui_runtime_state_failed", "generation="
                         + connection.generation(), failure);
-                notifyConnectionFailure();
+                notifyConnectionFailure(activeBridge);
             }
         }
 
@@ -171,7 +228,7 @@ final class SystemUiRuntime {
         } catch (Throwable failure) {
             logger.error("systemui_root_call_failed", "package=" + packageName
                     + " user=" + userId, failure);
-            notifyConnectionFailure();
+            notifyConnectionFailure(activeBridge);
             return rootResult(BackendStatus.TRANSIENT_TRANSPORT_FAILURE, startedAt);
         }
     }
@@ -208,7 +265,7 @@ final class SystemUiRuntime {
         }
     }
 
-    private void registerConnectedBridge(ComponentName name, IBinder service) {
+    private void beginBridgeRegistration(ComponentName name, IBinder service) {
         if (!connection.onConnected()) {
             logger.warn("systemui_bridge_stale_connection", "component=" + name);
             return;
@@ -218,6 +275,14 @@ final class SystemUiRuntime {
             handleDisconnected("missing-interface", true);
             return;
         }
+        rootStateFresh = false;
+        recoveryWorker.execute(() -> registerConnectedBridge(name, service, candidate));
+    }
+
+    private void registerConnectedBridge(
+            ComponentName name,
+            IBinder service,
+            IForceStopBridge candidate) {
         try {
             SystemUiRegistrationParcel registration = candidate.registerSystemUi(
                     BridgeProtocol.VERSION, connection.generation(), configurationCallback);
@@ -228,7 +293,7 @@ final class SystemUiRuntime {
                     || !connection.onRegistered(
                             connection.generation(), registration.sessionToken)) {
                 logger.warn("systemui_bridge_registration_rejected", "status=" + status);
-                handleDisconnected("registration-rejected", true);
+                mainHandler.post(() -> handleDisconnected("registration-rejected", true));
                 return;
             }
             if (registration.configuration != null) {
@@ -239,18 +304,19 @@ final class SystemUiRuntime {
                 bridge = candidate;
             }
             reconnectBackoff.reset();
+            refreshRootStateAndFlush(candidate);
             logger.info("systemui_bridge_ready", "component=" + name
                     + " generation=" + connection.generation()
                     + " newGeneration=" + registration.newGeneration);
         } catch (Throwable failure) {
             logger.error("systemui_bridge_registration_failed", "component=" + name, failure);
-            handleDisconnected("registration-failed", true);
+            mainHandler.post(() -> handleDisconnected("registration-failed", true));
         }
     }
 
     private void linkToBridgeDeath(IBinder binder) throws RemoteException {
         IBinder.DeathRecipient recipient = () -> mainHandler.post(
-                () -> handleDisconnected("binder-death", true));
+                () -> handleBinderDeath(binder));
         binder.linkToDeath(recipient, 0);
         synchronized (this) {
             unlinkDeathRecipientLocked();
@@ -259,8 +325,152 @@ final class SystemUiRuntime {
         }
     }
 
-    private void notifyConnectionFailure() {
-        mainHandler.post(() -> handleDisconnected("remote-call-failed", true));
+    private void handleBinderDeath(IBinder deadBinder) {
+        synchronized (this) {
+            if (linkedBinder != deadBinder) {
+                logger.info("systemui_bridge_stale_death_ignored", "generation="
+                        + connection.generation());
+                return;
+            }
+        }
+        handleDisconnected("binder-death", true);
+    }
+
+    private void notifyConnectionFailure(IForceStopBridge expectedBridge) {
+        mainHandler.post(() -> {
+            synchronized (SystemUiRuntime.this) {
+                if (bridge != expectedBridge) {
+                    logger.info("systemui_bridge_stale_failure_ignored", "generation="
+                            + connection.generation());
+                    return;
+                }
+            }
+            handleDisconnected("remote-call-failed", true);
+        });
+    }
+
+    private void installRecoveryEventsIfNeeded() {
+        RecoveryEventRegistrar registrar;
+        synchronized (this) {
+            if (context == null) {
+                return;
+            }
+            if (recoveryEventRegistrar == null) {
+                recoveryEventRegistrar = new RecoveryEventRegistrar(
+                        context, recoveryController, logger);
+            }
+            registrar = recoveryEventRegistrar;
+        }
+        registrar.installOnce();
+    }
+
+    private RootConnectionState recoveryRootState() {
+        SystemUiBridgeState bridgeState = connection.snapshot().state();
+        if (lastRootState.isTerminal()) {
+            return lastRootState;
+        }
+        if (bridgeState == SystemUiBridgeState.DISCONNECTED) {
+            return RootConnectionState.DISCONNECTED;
+        }
+        if (bridgeState != SystemUiBridgeState.READY || !rootStateFresh) {
+            return RootConnectionState.CONNECTING;
+        }
+        return lastRootState;
+    }
+
+    private void requestRecovery(RecoveryReason reason, long windowId) {
+        synchronized (this) {
+            pendingRecovery = new RecoveryRequest(reason, windowId);
+        }
+        logger.info("recovery_signal_accepted", "reason=" + reason
+                + " windowId=" + windowId);
+        runOnMain(this::requestBridgeReconnectFromSignal);
+        recoveryWorker.execute(this::flushPendingRecovery);
+    }
+
+    private void requestBridgeReconnectFromSignal() {
+        synchronized (this) {
+            if (connection.snapshot().state() == SystemUiBridgeState.DISCONNECTED
+                    && !reconnectScheduled) {
+                reconnectBackoff.reset();
+            }
+        }
+        bindIfNeeded();
+    }
+
+    private void refreshRootStateAndFlush(IForceStopBridge expectedBridge) {
+        SystemUiConnectionSnapshot snapshot = connection.snapshot();
+        if (snapshot.state() != SystemUiBridgeState.READY) {
+            return;
+        }
+        try {
+            BridgeRuntimeStateParcel parcel = expectedBridge.getSystemUiRuntimeState(
+                    BridgeProtocol.VERSION,
+                    connection.generation(),
+                    snapshot.sessionToken());
+            BridgeRuntimeState model = parcel == null ? null : parcel.toModel();
+            if (model == null || !model.systemUiConnected()) {
+                notifyConnectionFailure(expectedBridge);
+                return;
+            }
+            lastRootState = model.rootState();
+            rootStateFresh = true;
+            logger.info("recovery_root_state_refreshed", "state=" + model.rootState());
+            if (model.rootState().isRecoverable()) {
+                flushPendingRecovery();
+            } else {
+                clearPendingRecovery();
+            }
+        } catch (Throwable failure) {
+            logger.error("recovery_root_state_failed", "generation="
+                    + connection.generation(), failure);
+            notifyConnectionFailure(expectedBridge);
+        }
+    }
+
+    private void flushPendingRecovery() {
+        RecoveryRequest request;
+        IForceStopBridge activeBridge;
+        SystemUiConnectionSnapshot snapshot = connection.snapshot();
+        synchronized (this) {
+            request = pendingRecovery;
+            activeBridge = bridge;
+        }
+        if (request == null
+                || snapshot.state() != SystemUiBridgeState.READY
+                || activeBridge == null
+                || !rootStateFresh
+                || !lastRootState.isRecoverable()) {
+            return;
+        }
+        try {
+            int statusOrdinal = activeBridge.requestRecovery(
+                    BridgeProtocol.VERSION,
+                    connection.generation(),
+                    snapshot.sessionToken(),
+                    request.reason().ordinal(),
+                    request.windowId());
+            BridgeProtocol.Status status = protocolStatus(statusOrdinal);
+            logger.info("recovery_request_result", "reason=" + request.reason()
+                    + " windowId=" + request.windowId() + " status=" + status);
+            if (status == BridgeProtocol.Status.OK) {
+                synchronized (this) {
+                    if (request.equals(pendingRecovery)) {
+                        pendingRecovery = null;
+                    }
+                }
+            } else if (status != BridgeProtocol.Status.OPERATION_FAILED) {
+                clearPendingRecovery();
+            }
+        } catch (Throwable failure) {
+            logger.error("recovery_request_failed", "reason=" + request.reason()
+                    + " windowId=" + request.windowId(), failure);
+            notifyConnectionFailure(activeBridge);
+        }
+    }
+
+    private synchronized void clearPendingRecovery() {
+        pendingRecovery = null;
     }
 
     private synchronized boolean isLocalSystemUiAvailable() {
@@ -279,6 +489,10 @@ final class SystemUiRuntime {
         }
         connection.onDisconnected();
         configurationDelivery.onDisconnected();
+        rootStateFresh = false;
+        if (!lastRootState.isTerminal()) {
+            lastRootState = RootConnectionState.DISCONNECTED;
+        }
         if (shouldUnbind && activeContext != null) {
             try {
                 activeContext.unbindService(serviceConnection);

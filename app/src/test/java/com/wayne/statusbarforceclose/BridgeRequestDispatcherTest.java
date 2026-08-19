@@ -37,6 +37,25 @@ public final class BridgeRequestDispatcherTest {
     }
 
     @Test
+    public void registeredSystemUiGetsInitialAndChangedRootRuntimeState() {
+        Fixture fixture = fixture();
+        List<BridgeRuntimeState> runtimeStates = new ArrayList<>();
+
+        fixture.dispatcher.registerSystemUi(
+                SYSTEM_UI,
+                BridgeProtocol.VERSION,
+                "generation-a",
+                ignored -> { },
+                runtimeStates::add);
+        fixture.root.state = RootConnectionState.TRANSIENT_ERROR;
+        fixture.dispatcher.onRootStateChanged();
+
+        assertEquals(RootConnectionState.CONNECTED, runtimeStates.get(0).rootState());
+        assertEquals(RootConnectionState.TRANSIENT_ERROR,
+                runtimeStates.get(runtimeStates.size() - 1).rootState());
+    }
+
+    @Test
     public void forceStopRequiresSystemUiIdentityAndLiveMatchingSession() {
         Fixture fixture = fixture();
         SystemUiRegistration registration = fixture.dispatcher.registerSystemUi(
@@ -321,10 +340,11 @@ public final class BridgeRequestDispatcherTest {
         private final AtomicInteger forceStops = new AtomicInteger();
         private final AtomicInteger freshRequests = new AtomicInteger();
         private final AtomicInteger recoveries = new AtomicInteger();
+        private RootConnectionState state = RootConnectionState.CONNECTED;
 
         @Override
         public RootConnectionState state() {
-            return RootConnectionState.CONNECTED;
+            return state;
         }
 
         @Override

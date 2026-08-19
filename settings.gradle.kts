@@ -18,4 +18,5 @@ dependencyResolutionManagement {
 
 rootProject.name = "StatusBarForceClose"
 include(":app")
+include(":hidden-api-stubs")
 
