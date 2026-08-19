@@ -41,6 +41,25 @@ body:
       label: Reproduction steps and visible result
     validations:
       required: true
+  - type: dropdown
+    id: mode
+    attributes:
+      label: Execution mode
+      options:
+        - Automatic
+        - Root first
+        - SystemUI first
+        - Root only
+        - SystemUI only
+    validations:
+      required: true
+  - type: input
+    id: runtime
+    attributes:
+      label: Settings runtime state
+      description: Include SystemUI connection, Root service, SystemUI backend, and last successful execution as shown in the app.
+    validations:
+      required: true
   - type: textarea
     id: logs
     attributes:

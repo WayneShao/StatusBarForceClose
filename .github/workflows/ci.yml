@@ -35,13 +35,60 @@ jobs:
           "platforms;android-37.0"
           "build-tools;37.0.0"
 
-      - name: Test, lint, and build debug APK
-        run: ./gradlew clean testDebugUnitTest lintDebug assembleDebug
+      - name: Test, lint, and build application artifacts
+        run: >-
+          ./gradlew clean testDebugUnitTest lintDebug
+          assembleDebug assembleDebugAndroidTest assembleRelease --no-daemon
+
+      - name: Verify host test results
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          import glob
+          import xml.etree.ElementTree as ET
+
+          reports = glob.glob("app/build/test-results/testDebugUnitTest/TEST-*.xml")
+          assert reports, "no host test reports found"
+          totals = {key: 0 for key in ("tests", "failures", "errors", "skipped")}
+          for report in reports:
+              suite = ET.parse(report).getroot()
+              for key in totals:
+                  totals[key] += int(suite.attrib.get(key, 0))
+          print(totals)
+          assert totals["tests"] > 0
+          assert totals["failures"] == 0
+          assert totals["errors"] == 0
+          PY
+
+      - name: Validate Debug and Release APK contracts
+        shell: bash
+        run: |
+          bash .github/scripts/validate-apk.sh \
+            app/build/outputs/apk/debug/app-debug.apk diagnostics-present
+          bash .github/scripts/validate-apk.sh \
+            app/build/outputs/apk/release/app-release-unsigned.apk diagnostics-absent
+
+      - name: Validate instrumentation package
+        shell: bash
+        run: |
+          set -euo pipefail
+          test_apk=app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
+          [[ -f "$test_apk" ]] || { echo "::error::Missing instrumentation APK"; exit 1; }
+          manifest="$($ANDROID_SDK_ROOT/build-tools/37.0.0/aapt2 dump xmltree \
+            "$test_apk" --file AndroidManifest.xml)"
+          grep -Fq 'androidx.test.runner.AndroidJUnitRunner' <<<"$manifest" || {
+            echo "::error::Unexpected instrumentation runner"; exit 1;
+          }
+          grep -Fq 'com.wayne.statusbarforceclose' <<<"$manifest" || {
+            echo "::error::Unexpected instrumentation target"; exit 1;
+          }
 
       - name: Upload debug APK
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: StatusBarForceClose-debug-${{ github.sha }}
-          path: app/build/outputs/apk/debug/app-debug.apk
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
           if-no-files-found: error
           retention-days: 14

@@ -72,7 +72,7 @@ jobs:
           ANDROID_KEYSTORE_PASSWORD: ${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
         run: |
-          args=(clean testDebugUnitTest lintDebug assembleRelease)
+          args=(clean testDebugUnitTest lintDebug assembleDebug assembleDebugAndroidTest assembleRelease --no-daemon)
           if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
             args+=(-PdiagnosticsEnabled=true)
           fi
@@ -97,83 +97,17 @@ jobs:
             echo "::error::Release signer does not match SIGNING_CERT_SHA256"; exit 1;
           }
 
+          diagnostics_expectation=diagnostics-absent
+          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
+            diagnostics_expectation=diagnostics-present
+          fi
+          bash "$GITHUB_WORKSPACE/.github/scripts/validate-apk.sh" \
+            "$input" "$diagnostics_expectation"
+
           badging="$($aapt2 dump badging "$input")"
           package_line="$(sed -n '1p' <<<"$badging")"
-          package_name="$(sed -n "s/^package: name='\([^']*\)'.*/\1/p" <<<"$package_line")"
           version_code="$(sed -n "s/.*versionCode='\([^']*\)'.*/\1/p" <<<"$package_line")"
           version_name="$(sed -n "s/.*versionName='\([^']*\)'.*/\1/p" <<<"$package_line")"
-          sdk_line="$(sed -n '/^sdkVersion:/{p;q;}' <<<"$badging")"
-          target_sdk_line="$(sed -n '/^targetSdkVersion:/{p;q;}' <<<"$badging")"
-          application_line="$(sed -n '/^application:/{p;q;}' <<<"$badging")"
-          manifest="$($aapt2 dump xmltree "$input" --file AndroidManifest.xml)"
-          min_sdk="$(sed -n 's/^.*:minSdkVersion([^)]*)=\([0-9][0-9]*\).*$/\1/p' <<<"$manifest")"
-          target_sdk="$(sed -n 's/^.*:targetSdkVersion([^)]*)=\([0-9][0-9]*\).*$/\1/p' <<<"$manifest")"
-          printf 'SDK badging: %s | %s\n' "$sdk_line" "$target_sdk_line"
-          [[ "$package_name" == 'com.wayne.statusbarforceclose' ]] || {
-            echo "::error::Unexpected application package"; exit 1;
-          }
-          [[ "$min_sdk" == '36' ]] || {
-            echo "::error::Unexpected minSdk value '$min_sdk'"; exit 1;
-          }
-          [[ "$target_sdk" == '37' ]] || {
-            echo "::error::Unexpected targetSdk value '$target_sdk'"; exit 1;
-          }
-          [[ "$application_line" == *" icon=''"* ]] || {
-            echo "::error::APK unexpectedly declares an application icon"; exit 1;
-          }
-
-          for component in activity provider receiver; do
-            if grep -Eq "^[[:space:]]+E: ${component}( |$)" <<<"$manifest"; then
-              echo "::error::APK unexpectedly declares an Android $component"; exit 1
-            fi
-          done
-          service_count="$(grep -Ec '^[[:space:]]+E: service( |$)' <<<"$manifest")"
-          [[ "$service_count" == '1' ]] || {
-            echo "::error::APK must declare exactly one force-stop bridge service"; exit 1;
-          }
-          grep -Fq 'com.wayne.statusbarforceclose.ForceStopBridgeService' <<<"$manifest" || {
-            echo "::error::APK force-stop bridge service is missing"; exit 1;
-          }
-          if grep -Eq '^[[:space:]]+E: uses-permission( |$)' <<<"$manifest"; then
-            echo "::error::APK unexpectedly requests an Android permission"; exit 1
-          fi
-          archive_entries="$(unzip -Z1 "$input")"
-          if grep -Eq '^lib/' <<<"$archive_entries"; then
-            echo "::error::APK unexpectedly contains native libraries"; exit 1
-          fi
-          if ! grep -Fxq 'assets/main.jar' <<<"$archive_entries"; then
-            echo "::error::APK is missing the libsu RootService runtime"; exit 1
-          fi
-
-          expected_module_prop=$'minApiVersion=102\ntargetApiVersion=102\nstaticScope=true'
-          expected_scope='com.android.systemui'
-          expected_entry='com.wayne.statusbarforceclose.StatusBarForceCloseModule'
-          actual_module_prop="$(unzip -p "$input" META-INF/xposed/module.prop | tr -d '\r')"
-          actual_scope="$(unzip -p "$input" META-INF/xposed/scope.list | tr -d '\r')"
-          actual_entry="$(unzip -p "$input" META-INF/xposed/java_init.list | tr -d '\r')"
-          [[ "$actual_module_prop" == "$expected_module_prop" ]] || {
-            echo "::error::Invalid API102 module metadata"; exit 1;
-          }
-          [[ "$actual_scope" == "$expected_scope" ]] || {
-            echo "::error::Unexpected static Xposed scope"; exit 1;
-          }
-          [[ "$actual_entry" == "$expected_entry" ]] || {
-            echo "::error::Unexpected libxposed entry point"; exit 1;
-          }
-          if grep -Fxq 'assets/xposed_init' <<<"$archive_entries"; then
-            echo "::error::APK contains the legacy Xposed entry point"; exit 1
-          fi
-
-          dex_dir="$RUNNER_TEMP/statusbar-force-close-dex"
-          mkdir -p "$dex_dir"
-          unzip -qq "$input" 'classes*.dex' -d "$dex_dir"
-          if [[ "$GITHUB_EVENT_NAME" == "workflow_dispatch" ]]; then
-            if ! grep -aFRq -e 'event=' -e 'double_tap_detected' "$dex_dir"; then
-              echo "::error::Signed test APK is missing diagnostic messages"; exit 1
-            fi
-          elif grep -aFRq -e 'event=' -e 'double_tap_detected' "$dex_dir"; then
-            echo "::error::Release APK still contains debug diagnostic messages"; exit 1
-          fi
 
           if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
             expected_tag="${version_code}-${version_name// /_}"

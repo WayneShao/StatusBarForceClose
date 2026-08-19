@@ -6,6 +6,8 @@ The signed workflow treats an APK as releasable only after all checks below pass
 
 - `testDebugUnitTest`
 - `lintDebug`
+- `assembleDebug`
+- `assembleDebugAndroidTest`
 - `assembleRelease` with all four signing environment variables present
 - APK Signature Scheme verification through `apksigner`
 - signer certificate SHA-256 matches the pinned `SIGNING_CERT_SHA256`
@@ -16,8 +18,9 @@ The signed workflow treats an APK as releasable only after all checks below pass
 - version: Gradle `versionCode` and `versionName`
 - minimum SDK: 36
 - target SDK: 37
-- no launcher icon, Activity, Provider, Receiver, Android permission, or native library
+- exactly one exported launcher `SettingsActivity` with an adaptive icon
 - exactly one exported `ForceStopBridgeService`
+- no Provider, manifest Receiver, Android permission, or native library
 - libsu `assets/main.jar` is packaged for RootService startup
 
 ## Xposed contract
@@ -28,6 +31,16 @@ The signed workflow treats an APK as releasable only after all checks below pass
 - scope: only `com.android.systemui`
 - entry: `com.wayne.statusbarforceclose.StatusBarForceCloseModule`
 - no legacy `assets/xposed_init`
+- compile-only `android.app.TaskStackListener` is not defined by the APK
+- `TaskStackListenerBridge.onTaskMovedToFront` survives Release shrinking
+
+## Settings contract
+
+- English and Simplified Chinese resources are packaged
+- the Activity binds and observes the Bridge only while started
+- execution mode and background protection writes cross the versioned Binder boundary
+- the stored last successful result contains only backend type and elapsed time
+- no foreground package, label, Activity, task ID, or user history is persisted
 
 ## Diagnostics contract
 

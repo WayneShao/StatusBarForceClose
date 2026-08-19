@@ -8,12 +8,14 @@ application label in a SystemUI Toast.
 
 ## Boundaries
 
-- The APK has no launcher icon, Activity, settings UI, Provider, Receiver, Android permission, or
-  native library.
+- The APK has one launcher settings Activity, one adaptive icon, and one exported Bridge Service.
+- It has no Provider, manifest Receiver, Android permission, foreground Service, boot receiver, or
+  native library. Screen and unlock signals use process-lifetime dynamic receivers in SystemUI.
 - Static Xposed scope is only `com.android.systemui`.
-- The only Android component is an exported `ForceStopBridgeService`; it validates that the Binder
-  calling UID maps to `com.android.systemui` before accepting a request.
+- `ForceStopBridgeService` separates module-UID settings operations from authenticated SystemUI
+  operations. SystemUI requires a matching protocol, process generation, and opaque session token.
 - No vendor APK or system partition file is modified, repacked, replaced, or re-signed.
+- Durable state never contains a foreground package, label, Activity, task ID, or user history.
 
 ## Event strategies
 
@@ -33,19 +35,44 @@ The resolver reads the current foreground task, package name, label, task ID, an
 does not replace missing or cloned-user data with user 0. Android core, SystemUI, MiuiHome, and the
 active input method are protected; Settings and the module package are not protected.
 
-## Root execution
+## Runtime and execution
 
-1. SystemUI binds the module's explicit bridge Service.
-2. The module process validates the caller and invokes libsu `RootService.bind()` on its main
-   thread.
-3. libsu starts `RootActivityManagerService` as root.
-4. The root service applies hidden-API exemptions required by target SDK 37, obtains the system
-   ActivityManager Binder, and invokes `forceStopPackage(packageName, userId)`.
-5. A successful remote result becomes `ROOT_SERVICE`; only root failure permits the existing
-   SystemUI Binder fallback.
-6. SystemUI shows the dynamic Toast only after a successful result.
+1. SystemUI keeps one explicit `BIND_AUTO_CREATE` connection to the Bridge for its process lifetime.
+2. Registration establishes an authenticated generation/token session and atomically delivers the
+   latest configuration.
+3. The Bridge warms one libsu RootService connection without blocking gesture processing.
+4. The root process applies the required hidden-API exemptions, obtains ActivityManager Binder,
+   and invokes `forceStopPackage(packageName, userId)`.
+5. SystemUI probes its local Binder capability once per process. A permission rejection fuses that
+   backend for the rest of the process; unsupported structures remain fail-closed.
+6. `AUTO`, `ROOT_FIRST`, `SYSTEM_UI_FIRST`, `ROOT_ONLY`, and `SYSTEM_UI_ONLY` produce a typed,
+   deterministic execution plan. Only permitted backend failures fall through to another step.
+7. SystemUI shows the dynamic Toast only after a typed successful result.
 
 This root backend is vendor-independent. Only the SystemUI event strategy is vendor-specific.
+
+## Recovery
+
+- Opening the settings Activity generates one saved-state token and permits one idempotent root
+  connection request. Rotation redelivers the same token until receipt.
+- A task-front callback requests immediate recovery without transmitting task data.
+- `USER_PRESENT` requests immediate recovery; `SCREEN_ON` waits 750 ms.
+- All signals share a five-second monotonic cooldown and are suppressed while connected,
+  connecting, denied, or incompatible.
+- Automatic Bridge reconnect is bounded to one attempt. A later explicit signal can open a new
+  recovery window; there is no timer loop or boot component.
+
+## Settings and persistence
+
+The native Activity observes SystemUI connection, RootService state, local SystemUI capability,
+background-protection preference, and the last successful backend/elapsed time. It writes only the
+five-mode configuration and the background-protection switch.
+
+The Bridge store uses a versioned schema and synchronous commits around root authorization epochs,
+SystemUI generations, configuration revisions, optimization transitions, and minimal last-result
+state. Background protection captures original Doze/AppOps values, mutates only module-owned items,
+and restores only values that are still owned by this module. Corrupt or unknown durable state fails
+closed.
 
 ## Diagnostics
 
