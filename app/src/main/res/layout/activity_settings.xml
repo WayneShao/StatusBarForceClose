@@ -1,0 +1,180 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:id="@+id/settings_root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:clipToPadding="false"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="20dp"
+        android:paddingTop="20dp"
+        android:paddingEnd="20dp"
+        android:paddingBottom="28dp">
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/app_name"
+            android:textAppearance="@style/TextAppearance.StatusBarForceClose.Title" />
+
+        <TextView
+            style="@style/Widget.StatusBarForceClose.SectionLabel"
+            android:layout_marginTop="28dp"
+            android:text="@string/section_status" />
+
+        <LinearLayout
+            style="@style/Widget.StatusBarForceClose.StatusRow">
+
+            <TextView
+                style="@style/Widget.StatusBarForceClose.RowTitle"
+                android:text="@string/systemui_connection" />
+
+            <TextView
+                android:id="@+id/systemui_status_value"
+                style="@style/Widget.StatusBarForceClose.RowValue" />
+        </LinearLayout>
+
+        <View style="@style/Widget.StatusBarForceClose.Divider" />
+
+        <LinearLayout
+            style="@style/Widget.StatusBarForceClose.StatusRow">
+
+            <TextView
+                style="@style/Widget.StatusBarForceClose.RowTitle"
+                android:text="@string/root_service" />
+
+            <TextView
+                android:id="@+id/root_status_value"
+                style="@style/Widget.StatusBarForceClose.RowValue" />
+        </LinearLayout>
+
+        <View style="@style/Widget.StatusBarForceClose.Divider" />
+
+        <LinearLayout
+            style="@style/Widget.StatusBarForceClose.StatusRow">
+
+            <TextView
+                style="@style/Widget.StatusBarForceClose.RowTitle"
+                android:text="@string/systemui_backend" />
+
+            <TextView
+                android:id="@+id/systemui_backend_status_value"
+                style="@style/Widget.StatusBarForceClose.RowValue" />
+        </LinearLayout>
+
+        <View style="@style/Widget.StatusBarForceClose.Divider" />
+
+        <LinearLayout
+            style="@style/Widget.StatusBarForceClose.StatusRow">
+
+            <TextView
+                style="@style/Widget.StatusBarForceClose.RowTitle"
+                android:text="@string/last_successful_execution" />
+
+            <TextView
+                android:id="@+id/last_execution_value"
+                style="@style/Widget.StatusBarForceClose.RowValue" />
+        </LinearLayout>
+
+        <TextView
+            style="@style/Widget.StatusBarForceClose.SectionLabel"
+            android:layout_marginTop="24dp"
+            android:text="@string/section_execution" />
+
+        <LinearLayout
+            android:id="@+id/execution_mode_row"
+            style="@style/Widget.StatusBarForceClose.ActionRow"
+            android:contentDescription="@string/execution_mode">
+
+            <LinearLayout
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+
+                <TextView
+                    style="@style/Widget.StatusBarForceClose.RowTitle"
+                    android:layout_width="match_parent"
+                    android:text="@string/execution_mode" />
+
+                <TextView
+                    android:id="@+id/execution_mode_value"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="3dp"
+                    android:textAppearance="@style/TextAppearance.StatusBarForceClose.Body" />
+            </LinearLayout>
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_marginStart="12dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_chevron_right" />
+        </LinearLayout>
+
+        <View style="@style/Widget.StatusBarForceClose.Divider" />
+
+        <Switch
+            android:id="@+id/background_optimization_switch"
+            android:layout_width="match_parent"
+            android:layout_height="64dp"
+            android:checked="true"
+            android:gravity="center_vertical"
+            android:minHeight="64dp"
+            android:text="@string/background_optimization"
+            android:textAppearance="@style/TextAppearance.StatusBarForceClose.RowTitle" />
+
+        <TextView
+            style="@style/Widget.StatusBarForceClose.SectionLabel"
+            android:layout_marginTop="24dp"
+            android:text="@string/section_system" />
+
+        <LinearLayout
+            android:id="@+id/system_settings_row"
+            style="@style/Widget.StatusBarForceClose.ActionRow"
+            android:contentDescription="@string/background_settings"
+            tools:ignore="UseCompoundDrawables">
+
+            <TextView
+                style="@style/Widget.StatusBarForceClose.RowTitle"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:text="@string/background_settings" />
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_marginStart="12dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_chevron_right" />
+        </LinearLayout>
+
+        <View style="@style/Widget.StatusBarForceClose.Divider" />
+
+        <LinearLayout
+            android:id="@+id/application_settings_row"
+            style="@style/Widget.StatusBarForceClose.ActionRow"
+            android:contentDescription="@string/application_settings"
+            tools:ignore="UseCompoundDrawables">
+
+            <TextView
+                style="@style/Widget.StatusBarForceClose.RowTitle"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:text="@string/application_settings" />
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:layout_marginStart="12dp"
+                android:contentDescription="@null"
+                android:src="@drawable/ic_chevron_right" />
+        </LinearLayout>
+    </LinearLayout>
+</ScrollView>

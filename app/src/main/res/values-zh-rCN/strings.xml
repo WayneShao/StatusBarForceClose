@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">状态栏强制结束</string>
+    <string name="section_status">状态</string>
+    <string name="section_execution">执行</string>
+    <string name="section_system">系统</string>
+    <string name="systemui_connection">系统界面连接</string>
+    <string name="root_service">Root 服务</string>
+    <string name="systemui_backend">系统界面方案</string>
+    <string name="last_successful_execution">最近成功执行</string>
+    <string name="status_connecting">正在连接</string>
+    <string name="status_connected">已连接</string>
+    <string name="status_not_connected">未连接</string>
+    <string name="status_unknown">未知</string>
+    <string name="systemui_backend_available">可用</string>
+    <string name="systemui_backend_unavailable">不可用</string>
+    <string name="systemui_backend_permission_rejected">权限被拒绝</string>
+    <string name="last_execution_none">暂无</string>
+    <string name="last_execution_format">%1$s · %2$d 毫秒</string>
+    <string name="backend_root">Root</string>
+    <string name="backend_systemui">系统界面</string>
+    <string name="execution_mode">执行模式</string>
+    <string name="mode_auto">自动</string>
+    <string name="mode_root_first">Root 优先</string>
+    <string name="mode_systemui_first">系统界面优先</string>
+    <string name="mode_root_only">仅 Root</string>
+    <string name="mode_systemui_only">仅系统界面</string>
+    <string name="background_optimization">后台保护</string>
+    <string name="background_settings">后台设置</string>
+    <string name="application_settings">应用设置</string>
+</resources>
