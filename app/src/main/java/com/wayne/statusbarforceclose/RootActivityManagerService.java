@@ -15,6 +15,7 @@ import java.lang.reflect.Method;
 
 public final class RootActivityManagerService extends RootService {
     private static final String TAG = "StatusBarForceClose";
+    private volatile RootSystemSettingsAdapter systemSettings;
 
     private final IRootActivityController.Stub controller =
             new IRootActivityController.Stub() {
@@ -43,6 +44,42 @@ public final class RootActivityManagerService extends RootService {
                         Binder.restoreCallingIdentity(identity);
                     }
                 }
+
+                @Override
+                public int queryOptimizationItem(int item) {
+                    OptimizationItem parsed = optimizationItem(item);
+                    if (parsed == null) {
+                        return RootSystemSettings.UNSUPPORTED;
+                    }
+                    try {
+                        return settings().query(parsed);
+                    } catch (Throwable failure) {
+                        report(Log.ERROR, "root_optimization_query_failed",
+                                "item=" + parsed, failure);
+                        return RootSystemSettings.UNSUPPORTED;
+                    }
+                }
+
+                @Override
+                public boolean setOptimizationItem(int item, int value) {
+                    OptimizationItem parsed = optimizationItem(item);
+                    if (parsed == null) {
+                        return false;
+                    }
+                    try {
+                        boolean success = settings().set(parsed, value);
+                        report(success ? Log.INFO : Log.WARN,
+                                "root_optimization_set",
+                                "item=" + parsed + " value=" + value
+                                        + " success=" + success,
+                                null);
+                        return success;
+                    } catch (Throwable failure) {
+                        report(Log.ERROR, "root_optimization_set_failed",
+                                "item=" + parsed + " value=" + value, failure);
+                        return false;
+                    }
+                }
             };
 
     @Override
@@ -58,6 +95,19 @@ public final class RootActivityManagerService extends RootService {
             return invocation.getCause();
         }
         return throwable;
+    }
+
+    private synchronized RootSystemSettingsAdapter settings() throws Exception {
+        if (systemSettings == null) {
+            systemSettings = new RootSystemSettingsAdapter(this);
+        }
+        return systemSettings;
+    }
+
+    private static OptimizationItem optimizationItem(int ordinal) {
+        return ordinal >= 0 && ordinal < OptimizationItem.values().length
+                ? OptimizationItem.values()[ordinal]
+                : null;
     }
 
     private static void report(int priority, String event, String details, Throwable throwable) {

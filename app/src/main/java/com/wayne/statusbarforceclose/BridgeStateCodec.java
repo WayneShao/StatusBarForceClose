@@ -5,7 +5,7 @@ import java.util.Map;
 import java.util.Objects;
 
 final class BridgeStateCodec {
-    private static final int SCHEMA_VERSION = 1;
+    private static final int SCHEMA_VERSION = 2;
     private static final String SCHEMA = "schema_version";
     private static final String CONFIGURATION_STATE = "configuration_state";
     private static final String EXECUTION_MODE = "execution_mode";
@@ -21,6 +21,10 @@ final class BridgeStateCodec {
             "root_current_systemui_generation";
     private static final String PREVIOUS_SYSTEM_UI_GENERATION =
             "root_previous_systemui_generation";
+    private static final String OPTIMIZATION_GENERATION = "optimization_generation";
+    private static final String OPTIMIZATION_PHASE = "optimization_phase";
+    private static final String OPTIMIZATION_PENDING_ACTION = "optimization_pending_action";
+    private static final String OPTIMIZATION_PENDING_ITEM = "optimization_pending_item";
 
     private BridgeStateCodec() {
     }
@@ -52,6 +56,24 @@ final class BridgeStateCodec {
                 journal.currentSystemUiGeneration());
         putIfPresent(encoded, PREVIOUS_SYSTEM_UI_GENERATION,
                 journal.previousSystemUiGeneration());
+        OptimizationJournal optimization = snapshot.optimizationJournal();
+        encoded.put(OPTIMIZATION_GENERATION, optimization.generation());
+        encoded.put(OPTIMIZATION_PHASE, optimization.phase().name());
+        encoded.put(OPTIMIZATION_PENDING_ACTION, optimization.pendingAction().name());
+        if (optimization.pendingItem() != null) {
+            encoded.put(OPTIMIZATION_PENDING_ITEM, optimization.pendingItem().name());
+        }
+        for (OptimizationItem item : OptimizationItem.values()) {
+            OptimizationItemState itemState = optimization.item(item);
+            if (itemState == null) {
+                continue;
+            }
+            String prefix = optimizationPrefix(item);
+            encoded.put(prefix + "original", itemState.originalValue());
+            encoded.put(prefix + "applied", itemState.appliedValue());
+            encoded.put(prefix + "changed", itemState.changedByModule());
+            encoded.put(prefix + "resolution", itemState.resolution().name());
+        }
         return Map.copyOf(encoded);
     }
 
@@ -93,9 +115,36 @@ final class BridgeStateCodec {
                     optionalString(encoded, PREVIOUS_SETTINGS_TOKEN),
                     optionalString(encoded, CURRENT_SYSTEM_UI_GENERATION),
                     optionalString(encoded, PREVIOUS_SYSTEM_UI_GENERATION));
+            OptimizationAction pendingAction = OptimizationAction.valueOf(
+                    requiredString(encoded, OPTIMIZATION_PENDING_ACTION));
+            String pendingItemName = optionalString(encoded, OPTIMIZATION_PENDING_ITEM);
+            OptimizationItem pendingItem = pendingItemName == null
+                    ? null
+                    : OptimizationItem.valueOf(pendingItemName);
+            Map<OptimizationItem, OptimizationItemState> optimizationItems =
+                    new java.util.EnumMap<>(OptimizationItem.class);
+            for (OptimizationItem item : OptimizationItem.values()) {
+                String prefix = optimizationPrefix(item);
+                if (!encoded.containsKey(prefix + "resolution")) {
+                    continue;
+                }
+                optimizationItems.put(item, new OptimizationItemState(
+                        requiredInt(encoded, prefix + "original"),
+                        requiredInt(encoded, prefix + "applied"),
+                        requiredBoolean(encoded, prefix + "changed"),
+                        OptimizationResolution.valueOf(
+                                requiredString(encoded, prefix + "resolution"))));
+            }
+            OptimizationJournal optimization = new OptimizationJournal(
+                    requiredLong(encoded, OPTIMIZATION_GENERATION),
+                    OptimizationPhase.valueOf(requiredString(encoded, OPTIMIZATION_PHASE)),
+                    pendingAction,
+                    pendingItem,
+                    optimizationItems);
             return new BridgeStateSnapshot(
                     configuration,
-                    journal.forApkVersion(currentApkVersionCode));
+                    journal.forApkVersion(currentApkVersionCode),
+                    optimization);
         } catch (RuntimeException ignored) {
             return failClosed(currentApkVersionCode);
         }
@@ -104,14 +153,16 @@ final class BridgeStateCodec {
     private static BridgeStateSnapshot defaults(long currentApkVersionCode) {
         return new BridgeStateSnapshot(
                 ForceStopConfiguration.bridgeDefaults(),
-                RootAttemptJournal.initial(currentApkVersionCode));
+                RootAttemptJournal.initial(currentApkVersionCode),
+                OptimizationJournal.initial());
     }
 
     private static BridgeStateSnapshot failClosed(long currentApkVersionCode) {
         return new BridgeStateSnapshot(
                 ForceStopConfiguration.unconfigured(),
                 RootAttemptJournal.initial(currentApkVersionCode)
-                        .recordTerminal(RootConnectionState.INCOMPATIBLE));
+                        .recordTerminal(RootConnectionState.INCOMPATIBLE),
+                OptimizationJournal.initial());
     }
 
     private static void putIfPresent(Map<String, Object> target, String key, String value) {
@@ -161,5 +212,9 @@ final class BridgeStateCodec {
             throw new IllegalArgumentException("Expected nonblank string for " + key);
         }
         return stringValue;
+    }
+
+    private static String optimizationPrefix(OptimizationItem item) {
+        return "optimization_" + item.name().toLowerCase(java.util.Locale.ROOT) + '_';
     }
 }

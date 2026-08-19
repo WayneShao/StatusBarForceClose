@@ -3,7 +3,7 @@ package com.wayne.statusbarforceclose;
 import java.util.Objects;
 import java.util.function.Consumer;
 
-final class RootConnectionManager implements RootOperations {
+final class RootConnectionManager implements RootOperations, RootSystemSettings {
     private final Object lock = new Object();
     private final RootBindAdapter bindAdapter;
     private final MonotonicClock clock;
@@ -126,6 +126,42 @@ final class RootConnectionManager implements RootOperations {
     RootController connectedControllerForTest() {
         synchronized (lock) {
             return connectedController;
+        }
+    }
+
+    @Override
+    public int query(OptimizationItem item) {
+        Objects.requireNonNull(item, "item");
+        RootController controller;
+        synchronized (lock) {
+            refreshDeadControllerLocked();
+            controller = connectedController;
+        }
+        if (controller == null) {
+            return RootSystemSettings.UNSUPPORTED;
+        }
+        try {
+            return controller.queryOptimizationItem(item);
+        } catch (Exception failure) {
+            return RootSystemSettings.UNSUPPORTED;
+        }
+    }
+
+    @Override
+    public boolean set(OptimizationItem item, int value) {
+        Objects.requireNonNull(item, "item");
+        RootController controller;
+        synchronized (lock) {
+            refreshDeadControllerLocked();
+            controller = connectedController;
+        }
+        if (controller == null) {
+            return false;
+        }
+        try {
+            return controller.setOptimizationItem(item, value);
+        } catch (Exception failure) {
+            return false;
         }
     }
 

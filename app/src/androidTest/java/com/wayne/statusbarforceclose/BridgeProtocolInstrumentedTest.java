@@ -57,12 +57,12 @@ public final class BridgeProtocolInstrumentedTest {
     }
 
     @Test
-    public void nonModuleCallerCannotIssueSettingsRootRequest() throws Exception {
+    public void moduleProcessCanIssueSettingsRootRequest() throws Exception {
         IForceStopBridge bridge = IForceStopBridge.Stub.asInterface(binder);
 
         int status = bridge.requestRootForSettings(BridgeProtocol.VERSION, "settings-test");
 
-        assertEquals(BridgeProtocol.Status.PERMISSION_REJECTED.ordinal(), status);
+        assertEquals(BridgeProtocol.Status.OK.ordinal(), status);
     }
 
     @Test

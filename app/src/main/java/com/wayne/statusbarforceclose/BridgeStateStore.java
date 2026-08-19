@@ -6,7 +6,7 @@ import android.content.SharedPreferences;
 import java.util.Map;
 import java.util.Objects;
 
-final class BridgeStateStore implements BridgeStateRepository {
+final class BridgeStateStore implements BridgeStateRepository, OptimizationRepository {
     static final String PREFERENCES_NAME = "bridge_state";
 
     private final SharedPreferences preferences;
@@ -48,5 +48,17 @@ final class BridgeStateStore implements BridgeStateRepository {
             }
         }
         return editor.commit();
+    }
+
+    @Override
+    public synchronized OptimizationJournal loadOptimizationJournal() {
+        return load().optimizationJournal();
+    }
+
+    @Override
+    public synchronized boolean commitOptimizationJournal(OptimizationJournal journal) {
+        BridgeStateSnapshot current = load();
+        return commit(new BridgeStateSnapshot(
+                current.configuration(), current.rootJournal(), journal));
     }
 }

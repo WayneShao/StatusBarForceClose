@@ -209,6 +209,27 @@ public final class BridgeRequestDispatcherTest {
         assertEquals(2, replacement.size());
     }
 
+    @Test
+    public void configurationWritePreservesExternallyUpdatedOptimizationJournal() {
+        Fixture fixture = fixture();
+        OptimizationJournal externallyUpdated = OptimizationJournal.initial()
+                .startGeneration()
+                .putItem(
+                        OptimizationItem.DOZE_WHITELIST,
+                        new OptimizationItemState(
+                                0, 1, true, OptimizationResolution.APPLIED))
+                .withPhase(OptimizationPhase.ACTIVE);
+        fixture.repository.snapshot = new BridgeStateSnapshot(
+                fixture.repository.snapshot.configuration(),
+                fixture.repository.snapshot.rootJournal(),
+                externallyUpdated);
+
+        fixture.dispatcher.updateConfiguration(
+                MODULE, BridgeProtocol.VERSION, ExecutionMode.ROOT_ONLY, true);
+
+        assertEquals(externallyUpdated, fixture.repository.snapshot.optimizationJournal());
+    }
+
     private static java.lang.reflect.Method findLegacyForceStopMethod() {
         try {
             return BridgeRequestDispatcher.class.getDeclaredMethod(

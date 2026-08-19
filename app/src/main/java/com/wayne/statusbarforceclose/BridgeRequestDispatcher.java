@@ -51,6 +51,7 @@ final class BridgeRequestDispatcher {
         if (isBlank(generation) || callback == null) {
             return SystemUiRegistration.rejected(BridgeProtocol.Status.INVALID_ARGUMENT);
         }
+        refreshState();
         String callbackId = "systemui-callback-" + callbackIds.incrementAndGet();
         SystemUiSessionRegistry.Registration registration = sessionRegistry.register(
                 protocol, caller.uid(), generation, callbackId);
@@ -66,7 +67,7 @@ final class BridgeRequestDispatcher {
                 .consumeSystemUiGeneration(generation);
         if (trigger.journal() != state.rootJournal()) {
             BridgeStateSnapshot updated = new BridgeStateSnapshot(
-                    state.configuration(), trigger.journal());
+                    state.configuration(), trigger.journal(), state.optimizationJournal());
             if (!repository.commit(updated)) {
                 systemUiCallbacks.remove(callbackId);
                 sessionRegistry.unregister(registration.sessionToken());
@@ -165,17 +166,29 @@ final class BridgeRequestDispatcher {
         if (mode == null) {
             return BridgeProtocol.Status.INVALID_ARGUMENT;
         }
+        refreshState();
+        boolean optimizationChanged = state.configuration().backgroundOptimizationEnabled()
+                != backgroundOptimizationEnabled;
         ForceStopConfiguration updatedConfiguration = state.configuration().update(
                 mode, backgroundOptimizationEnabled);
         BridgeStateSnapshot updated = new BridgeStateSnapshot(
-                updatedConfiguration, state.rootJournal());
+                updatedConfiguration, state.rootJournal(), state.optimizationJournal());
         if (!repository.commit(updated)) {
             return BridgeProtocol.Status.STORAGE_ERROR;
         }
         state = updated;
         systemUiCallbacks.notifyObservers(updatedConfiguration);
         notifyRuntimeObservers();
-        return BridgeProtocol.Status.OK;
+        if (!optimizationChanged) {
+            return BridgeProtocol.Status.OK;
+        }
+        boolean optimizationSuccess = optimizationOperations.setEnabled(
+                backgroundOptimizationEnabled);
+        refreshState();
+        notifyRuntimeObservers();
+        return optimizationSuccess
+                ? BridgeProtocol.Status.OK
+                : BridgeProtocol.Status.OPERATION_FAILED;
     }
 
     synchronized BridgeProtocol.Status requestRootForSettings(
@@ -187,13 +200,14 @@ final class BridgeRequestDispatcher {
         if (isBlank(openToken)) {
             return BridgeProtocol.Status.INVALID_ARGUMENT;
         }
+        refreshState();
         RootAttemptJournal.TriggerResult trigger = state.rootJournal()
                 .consumeSettingsOpen(openToken);
         if (trigger.journal() == state.rootJournal()) {
             return BridgeProtocol.Status.OK;
         }
         BridgeStateSnapshot updated = new BridgeStateSnapshot(
-                state.configuration(), trigger.journal());
+                state.configuration(), trigger.journal(), state.optimizationJournal());
         if (!repository.commit(updated)) {
             return BridgeProtocol.Status.STORAGE_ERROR;
         }
@@ -255,15 +269,8 @@ final class BridgeRequestDispatcher {
 
     synchronized BridgeProtocol.Status setBackgroundOptimization(
             CallerIdentity caller, int protocol, boolean enabled) {
-        BridgeProtocol.Status authorization = authorizeModule(caller, protocol);
-        if (authorization != BridgeProtocol.Status.OK) {
-            return authorization;
-        }
-        if (!optimizationOperations.setEnabled(enabled)) {
-            return BridgeProtocol.Status.OPERATION_FAILED;
-        }
-        notifyRuntimeObservers();
-        return BridgeProtocol.Status.OK;
+        return updateConfiguration(
+                caller, protocol, state.configuration().executionMode(), enabled);
     }
 
     synchronized ForceStopConfiguration configuration() {
@@ -278,9 +285,10 @@ final class BridgeRequestDispatcher {
     }
 
     synchronized void recordRootTerminal(RootConnectionState terminalState) {
+        refreshState();
         RootAttemptJournal updatedJournal = state.rootJournal().recordTerminal(terminalState);
         BridgeStateSnapshot updated = new BridgeStateSnapshot(
-                state.configuration(), updatedJournal);
+                state.configuration(), updatedJournal, state.optimizationJournal());
         if (!repository.commit(updated)) {
             throw new IllegalStateException("Failed to persist terminal root state");
         }
@@ -328,5 +336,9 @@ final class BridgeRequestDispatcher {
 
     private static boolean isBlank(String value) {
         return value == null || value.isBlank();
+    }
+
+    private void refreshState() {
+        state = Objects.requireNonNull(repository.load(), "repository state");
     }
 }

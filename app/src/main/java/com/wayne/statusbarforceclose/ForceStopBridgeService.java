@@ -187,6 +187,8 @@ public final class ForceStopBridgeService extends Service {
         BridgeStateStore stateStore = new BridgeStateStore(this, versionCode);
         BridgeStateSnapshot initialState = stateStore.load();
         AtomicReference<BridgeRequestDispatcher> dispatcherReference = new AtomicReference<>();
+        AtomicReference<BackgroundOptimizationController> optimizationReference =
+                new AtomicReference<>();
         RootConnectionState durableRootState = initialState.rootJournal().terminalState() == null
                 ? RootConnectionState.DISCONNECTED
                 : initialState.rootJournal().terminalState();
@@ -215,12 +217,23 @@ public final class ForceStopBridgeService extends Service {
                     if (active != null) {
                         active.onRootStateChanged();
                     }
+                    BackgroundOptimizationController optimization =
+                            optimizationReference.get();
+                    if (optimization != null
+                            && rootConnectionManager.state() == RootConnectionState.CONNECTED
+                            && active != null
+                            && active.configuration().backgroundOptimizationEnabled()) {
+                        mainHandler.post(() -> optimization.setEnabled(true));
+                    }
                 });
+        BackgroundOptimizationController optimizationController =
+                new BackgroundOptimizationController(stateStore, rootConnectionManager);
+        optimizationReference.set(optimizationController);
         dispatcher = new BridgeRequestDispatcher(
                 getApplicationInfo().uid,
                 stateStore,
                 rootConnectionManager,
-                OptimizationOperations.unavailable(),
+                optimizationController,
                 new SystemUiSessionRegistry(BridgeProtocol.VERSION, this::newSessionToken));
         dispatcherReference.set(dispatcher);
         if (durableRootState == RootConnectionState.DISCONNECTED) {

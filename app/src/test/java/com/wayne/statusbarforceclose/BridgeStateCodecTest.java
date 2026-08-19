@@ -18,9 +18,18 @@ public final class BridgeStateCodecTest {
                 .consumeSystemUiGeneration("systemui-a").journal()
                 .consumeSystemUiGeneration("systemui-b").journal()
                 .recordTerminal(RootConnectionState.DENIED);
+        OptimizationJournal optimization = OptimizationJournal.initial()
+                .startGeneration()
+                .putItem(
+                        OptimizationItem.DOZE_WHITELIST,
+                        new OptimizationItemState(
+                                0, 1, true, OptimizationResolution.APPLIED))
+                .pending(OptimizationAction.RESTORE, OptimizationItem.DOZE_WHITELIST)
+                .withPhase(OptimizationPhase.RESTORING);
         BridgeStateSnapshot snapshot = new BridgeStateSnapshot(
                 ForceStopConfiguration.bridgeDefaults().update(ExecutionMode.SYSTEM_UI_FIRST, false),
-                journal);
+                journal,
+                optimization);
 
         BridgeStateSnapshot decoded = BridgeStateCodec.decode(
                 BridgeStateCodec.encode(snapshot), 7L);

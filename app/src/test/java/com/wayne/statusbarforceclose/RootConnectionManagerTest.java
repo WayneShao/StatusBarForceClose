@@ -268,5 +268,15 @@ public final class RootConnectionManagerTest {
             lastUserId = userId;
             return forceStopResult;
         }
+
+        @Override
+        public int queryOptimizationItem(OptimizationItem item) {
+            return RootSystemSettings.UNSUPPORTED;
+        }
+
+        @Override
+        public boolean setOptimizationItem(OptimizationItem item, int value) {
+            return false;
+        }
     }
 }

@@ -107,5 +107,15 @@ final class LibsuRootBindAdapter implements RootBindAdapter {
         public boolean forceStop(String packageName, int userId) throws Exception {
             return delegate.forceStop(packageName, userId);
         }
+
+        @Override
+        public int queryOptimizationItem(OptimizationItem item) throws Exception {
+            return delegate.queryOptimizationItem(item.ordinal());
+        }
+
+        @Override
+        public boolean setOptimizationItem(OptimizationItem item, int value) throws Exception {
+            return delegate.setOptimizationItem(item.ordinal(), value);
+        }
     }
 }
