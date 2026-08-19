@@ -22,4 +22,20 @@ public class RootBridgeCallerPolicyTest {
     public void rejectsMissingPackage() {
         assertFalse(RootBridgeCallerPolicy.isAllowed(null));
     }
+
+    @Test
+    public void moduleOperationsRequireExactModuleUid() {
+        assertTrue(RootBridgeCallerPolicy.isModuleUid(10300, 10300));
+        assertFalse(RootBridgeCallerPolicy.isModuleUid(10301, 10300));
+        assertFalse(RootBridgeCallerPolicy.isModuleUid(-1, 10300));
+    }
+
+    @Test
+    public void systemUiIdentityAndModuleIdentityRemainIndependent() {
+        assertTrue(RootBridgeCallerPolicy.isSystemUi(
+                new String[] {"com.android.systemui"}));
+        assertFalse(RootBridgeCallerPolicy.isSystemUi(
+                new String[] {"com.wayne.statusbarforceclose"}));
+        assertTrue(RootBridgeCallerPolicy.isModuleUid(10300, 10300));
+    }
 }

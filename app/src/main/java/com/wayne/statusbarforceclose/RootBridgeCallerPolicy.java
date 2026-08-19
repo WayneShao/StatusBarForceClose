@@ -7,6 +7,10 @@ final class RootBridgeCallerPolicy {
     }
 
     static boolean isAllowed(String[] callingPackages) {
+        return isSystemUi(callingPackages);
+    }
+
+    static boolean isSystemUi(String[] callingPackages) {
         if (callingPackages == null) {
             return false;
         }
@@ -16,5 +20,9 @@ final class RootBridgeCallerPolicy {
             }
         }
         return false;
+    }
+
+    static boolean isModuleUid(int callingUid, int moduleUid) {
+        return callingUid >= 0 && moduleUid >= 0 && callingUid == moduleUid;
     }
 }

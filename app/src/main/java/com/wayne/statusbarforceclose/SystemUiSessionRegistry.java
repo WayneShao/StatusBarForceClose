@@ -29,12 +29,13 @@ final class SystemUiSessionRegistry {
         }
         boolean newGeneration = activeSession == null
                 || !activeSession.generation.equals(generation);
+        String replacedCallbackId = activeSession == null ? null : activeSession.callbackId;
         String token = tokenFactory.get();
         if (isBlank(token)) {
             throw new IllegalStateException("Token factory returned a blank token");
         }
         activeSession = new Session(protocol, callingUid, generation, callbackId, token);
-        return new Registration(true, token, newGeneration);
+        return new Registration(true, token, newGeneration, replacedCallbackId);
     }
 
     synchronized boolean isAuthorized(
@@ -65,13 +66,21 @@ final class SystemUiSessionRegistry {
         return true;
     }
 
+    synchronized boolean hasActiveSession() {
+        return activeSession != null;
+    }
+
     private static boolean isBlank(String value) {
         return value == null || value.isBlank();
     }
 
-    record Registration(boolean accepted, String sessionToken, boolean newGeneration) {
+    record Registration(
+            boolean accepted,
+            String sessionToken,
+            boolean newGeneration,
+            String replacedCallbackId) {
         static Registration rejected() {
-            return new Registration(false, null, false);
+            return new Registration(false, null, false, null);
         }
     }
 

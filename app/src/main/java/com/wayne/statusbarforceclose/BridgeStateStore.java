@@ -6,7 +6,7 @@ import android.content.SharedPreferences;
 import java.util.Map;
 import java.util.Objects;
 
-final class BridgeStateStore {
+final class BridgeStateStore implements BridgeStateRepository {
     static final String PREFERENCES_NAME = "bridge_state";
 
     private final SharedPreferences preferences;
@@ -23,11 +23,13 @@ final class BridgeStateStore {
         this.currentApkVersionCode = currentApkVersionCode;
     }
 
-    synchronized BridgeStateSnapshot load() {
+    @Override
+    public synchronized BridgeStateSnapshot load() {
         return BridgeStateCodec.decode(preferences.getAll(), currentApkVersionCode);
     }
 
-    synchronized boolean commit(BridgeStateSnapshot snapshot) {
+    @Override
+    public synchronized boolean commit(BridgeStateSnapshot snapshot) {
         Map<String, Object> encoded = BridgeStateCodec.encode(snapshot);
         SharedPreferences.Editor editor = preferences.edit().clear();
         for (Map.Entry<String, Object> entry : encoded.entrySet()) {

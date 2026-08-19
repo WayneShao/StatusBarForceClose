@@ -77,15 +77,9 @@ final class RootBridgeForceStopMethod implements ForceStopMethod {
                         + " user=" + userId);
                 return result(BackendStatus.TRANSIENT_TRANSPORT_FAILURE, startedAt);
             }
-            boolean success = bridge.forceStop(packageName, userId);
-            logger.log(
-                    success ? android.util.Log.INFO : android.util.Log.WARN,
-                    "root_bridge_result",
-                    "package=" + packageName + " user=" + userId + " success=" + success,
-                    null);
-            return result(
-                    success ? BackendStatus.SUCCESS : BackendStatus.OPERATION_FAILED,
-                    startedAt);
+            logger.warn("root_bridge_legacy_client_disabled", "package=" + packageName
+                    + " user=" + userId + " protocol=" + BridgeProtocol.VERSION);
+            return result(BackendStatus.UNSUPPORTED, startedAt);
         } catch (InterruptedException interrupted) {
             Thread.currentThread().interrupt();
             logger.error("root_bridge_interrupted", "package=" + packageName
