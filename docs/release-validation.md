@@ -48,7 +48,7 @@ The signed workflow treats an APK as releasable only after all checks below pass
 ## Diagnostics contract
 
 - manually dispatched signed test builds retain structured diagnostics
-- tag-triggered releases compile diagnostics out and R8 removes the strings
+- tag-triggered releases compile detailed diagnostics out; rate-limited `health=` events remain without target names, session tokens or exception messages
 
 ## Publication contract
 

@@ -96,7 +96,7 @@ Magisk 通常可以在首次请求时弹出授权窗口；KernelSU 的授权策�
 结构化诊断受编译期常量 `BuildConfig.DIAGNOSTICS_ENABLED` 控制：
 
 - Debug：`true`，写入 LSPosed 模块日志和 logcat；
-- Release：`false`，R8 移除不可达的诊断分支。
+- Release：`false`，R8 移除详细诊断分支；仍保留限频的 `health=` 状态事件，不记录目标应用名称或会话令牌。
 
 查看 Debug 日志：
 
@@ -140,7 +140,7 @@ $env:ANDROID_KEY_PASSWORD='KEY_PASSWORD'
 
 - `.github/workflows/ci.yml`：对 `main` 的 push 和 pull request 执行单元测试、lint、Debug、仪器测试 APK 和混淆 Release 构建，并用同一脚本验证两个 APK 的组件与日志契约。
 - `.github/workflows/release.yml`：手动触发时生成保留诊断的签名测试包；推送 `versionCode-versionName` tag 时生成关闭诊断的正式 Release。
-- 发布工作流验证签名证书、包名、版本、SDK、唯一设置 Activity、唯一 Launcher alias、唯一 Bridge Service、图标、零 Android 权限/Provider/清单 Receiver、API 102 元数据、静态作用域、隐藏 stub 未打包、R8 回调保留、日志剥离和 SHA-256。
+- 发布工作流验证签名证书、包名、版本、SDK、唯一设置 Activity、唯一 Launcher alias、唯一 Bridge Service、图标、零 Android 权限/Provider/清单 Receiver、API 102 元数据、静态作用域、隐藏 stub 未打包、R8 回调保留、详细日志剥离、基础健康日志和 SHA-256。
 
 签名材料仅保存在 GitHub Actions Secrets 中。
 
@@ -177,7 +177,7 @@ StatusBarForceClose/
 - 当前只为已验证的 HyperOS 4 和 ColorOS 16 结构安装 Hook；其他结构会记录 `UNSUPPORTED` 并停止。
 - 模块保留 SystemUI Binder 后端用于具备权限的平台；ColorOS 16 的既有实机结果表明该路径不可用，因此 OnePlus 当前依赖 RootService。
 - 模块传递真实 Android 用户 ID；读取失败时不回退到用户 `0`。
-- release 构建不保留 Debug 诊断字符串，需要排障时使用对应提交的 Debug 或签名测试 artifact。
+- Release 保留限频健康日志。需要完整请求链路时，使用对应提交的 Debug 或签名测试 artifact。
 
 ## License
 
