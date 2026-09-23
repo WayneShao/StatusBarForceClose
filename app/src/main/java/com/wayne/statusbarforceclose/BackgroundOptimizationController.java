@@ -59,10 +59,25 @@ final class BackgroundOptimizationController implements OptimizationOperations {
                     return false;
                 }
             }
-            if (itemState.resolution() == OptimizationResolution.UNSUPPORTED
-                    || itemState.resolution() == OptimizationResolution.UNCHANGED
-                    || itemState.resolution() == OptimizationResolution.APPLIED) {
+            if (itemState.resolution() == OptimizationResolution.UNSUPPORTED) {
                 continue;
+            }
+            if (itemState.resolution() == OptimizationResolution.UNCHANGED
+                    || itemState.resolution() == OptimizationResolution.APPLIED) {
+                int current = rootSettings.query(item);
+                if (current == itemState.appliedValue()) continue;
+                if (current == RootSystemSettings.UNSUPPORTED) {
+                    successful = false;
+                    continue;
+                }
+                // Preserve the original rollback value for our own earlier change.
+                // A previously untouched item needs a fresh baseline before our first write.
+                if (!itemState.changedByModule()) {
+                    itemState = new OptimizationItemState(current, item.desiredValue(),
+                            false, OptimizationResolution.CAPTURED);
+                    journal = journal.putItem(item, itemState);
+                    if (!repository.commitOptimizationJournal(journal)) return false;
+                }
             }
 
             OptimizationJournal pending = journal.pending(OptimizationAction.APPLY, item);

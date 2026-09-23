@@ -19,7 +19,7 @@ interface IForceStopBridge {
             String sessionToken,
             String packageName,
             int userId,
-            boolean waitForConnection);
+            boolean waitForConnection, long deadlineElapsedRealtime);
     int requestRecovery(
             int protocol,
             String generation,

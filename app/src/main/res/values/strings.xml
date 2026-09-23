@@ -30,4 +30,9 @@
     <string name="launcher_icon_write_failed">Could not update launcher icon</string>
     <string name="background_settings">Background settings</string>
     <string name="application_settings">App settings</string>
+    <string name="protection_yes">Allowed</string>
+    <string name="protection_no">Not allowed</string>
+    <string name="protection_default">System default</string>
+    <string name="protection_unknown">Current protection: not checked. Doze exemption does not prevent vendor or third-party freezing.</string>
+    <string name="protection_actual">Current Doze exemption: %1$s\nBackground: %2$s ¡¤ Any background: %3$s\nThe switch requests optimization; these values are read from Android. Vendor and third-party freeze protection is not verified.</string>
 </resources>

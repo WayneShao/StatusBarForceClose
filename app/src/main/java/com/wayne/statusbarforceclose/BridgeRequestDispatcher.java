@@ -164,14 +164,21 @@ final class BridgeRequestDispatcher {
         return state.configuration();
     }
 
-    synchronized BackendResult forceStopRoot(
+    BackendResult forceStopRoot(CallerIdentity caller, int protocol, String generation,
+            String sessionToken, String packageName, int userId, boolean waitForConnection) {
+        return forceStopRoot(caller, protocol, generation, sessionToken,
+                packageName, userId, waitForConnection, Long.MAX_VALUE);
+    }
+
+    BackendResult forceStopRoot(
             CallerIdentity caller,
             int protocol,
             String generation,
             String sessionToken,
             String packageName,
             int userId,
-            boolean waitForConnection) {
+            boolean waitForConnection, long deadlineElapsedRealtime) {
+        synchronized (this) {
         if (protocol != BridgeProtocol.VERSION) {
             return rootResult(BackendStatus.UNSUPPORTED);
         }
@@ -181,7 +188,8 @@ final class BridgeRequestDispatcher {
         if (isBlank(packageName) || userId < 0) {
             return rootResult(BackendStatus.OPERATION_FAILED);
         }
-        return rootOperations.forceStop(packageName, userId, waitForConnection);
+        }
+        return rootOperations.forceStop(packageName, userId, waitForConnection, deadlineElapsedRealtime);
     }
 
     synchronized BridgeProtocol.Status reportSystemUiCapability(

@@ -12,6 +12,21 @@ import org.junit.Test;
 
 public final class RootConnectionManagerTest {
     @Test
+    public void expiredRequestCannotStartOrExecuteRootWork() {
+        Fixture fixture = fixture();
+        fixture.clock.now = 100;
+        BackendResult expired = fixture.manager.forceStop("com.example.reader", 0, true, 99);
+        assertEquals(BackendStatus.TRANSIENT_TRANSPORT_FAILURE, expired.status());
+        assertEquals(0, fixture.adapter.bindings.size());
+        fixture.manager.requestFreshConnection();
+        FakeController controller = new FakeController();
+        fixture.adapter.bindings.get(0).listener.connected(controller);
+        assertEquals(BackendStatus.TRANSIENT_TRANSPORT_FAILURE,
+                fixture.manager.forceStop("com.example.reader", 999, false, 99).status());
+        assertEquals(0, controller.forceStops.get());
+    }
+
+    @Test
     public void startsOneBindPerAttemptAndIgnoresRepeatedWarmup() {
         Fixture fixture = fixture();
 

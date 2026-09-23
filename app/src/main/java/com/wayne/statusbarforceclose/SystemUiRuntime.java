@@ -31,6 +31,9 @@ final class SystemUiRuntime {
     });
     private final RecoveryEventController recoveryController;
 
+    private final BoundedRemoteCalls remoteCalls =
+            new BoundedRemoteCalls("StatusBarForceClose-IPC", 2);
+    private volatile long bindingEpoch;
     private Context context;
     private IForceStopBridge bridge;
     private IBinder linkedBinder;
@@ -86,27 +89,31 @@ final class SystemUiRuntime {
         }
     };
 
-    private final ServiceConnection serviceConnection = new ServiceConnection() {
+    private ServiceConnection serviceConnection;
+
+    private ServiceConnection newServiceConnection(long epoch) {
+        return new ServiceConnection() {
         @Override
         public void onServiceConnected(ComponentName name, IBinder service) {
-            beginBridgeRegistration(name, service);
+            if (bindingEpoch == epoch) beginBridgeRegistration(name, service, epoch);
         }
 
         @Override
         public void onServiceDisconnected(ComponentName name) {
-            handleDisconnected("service-disconnected", true);
+            if (bindingEpoch == epoch) handleDisconnected("service-disconnected", true);
         }
 
         @Override
         public void onBindingDied(ComponentName name) {
-            handleDisconnected("binding-died", true);
+            if (bindingEpoch == epoch) handleDisconnected("binding-died", true);
         }
 
         @Override
         public void onNullBinding(ComponentName name) {
-            handleDisconnected("null-binding", true);
+            if (bindingEpoch == epoch) handleDisconnected("null-binding", true);
         }
-    };
+        };
+    }
 
     SystemUiRuntime(DiagnosticLogger logger, ForceStopMethod localSystemUiMethod) {
         this.logger = logger;
@@ -146,6 +153,8 @@ final class SystemUiRuntime {
     }
 
     ForceStopResult forceStop(String packageName, int userId) {
+        long deadline = android.os.SystemClock.elapsedRealtime()
+                + TimedBridge.EXECUTION_TIMEOUT_MS - 250L;
         ForceStopConfiguration configuration = configurationDelivery.onDisconnected();
         SystemUiConnectionSnapshot snapshot = connection.snapshot();
         IForceStopBridge activeBridge;
@@ -160,7 +169,7 @@ final class SystemUiRuntime {
                         BridgeProtocol.VERSION,
                         connection.generation(),
                         snapshot.sessionToken());
-                if (state != null) {
+                if (state != null && isCurrentSession(activeBridge, snapshot)) {
                     BridgeRuntimeState model = state.toModel();
                     if (model.systemUiConnected()) {
                         rootState = model.rootState();
@@ -188,9 +197,13 @@ final class SystemUiRuntime {
                         snapshot,
                         targetPackage,
                         targetUser,
-                        waitForConnection);
+                        waitForConnection, deadline);
         ForceStopMethod classifiedSystemUiMethod =
                 (targetPackage, targetUser, waitForConnection) -> {
+                    if (android.os.SystemClock.elapsedRealtime() >= deadline) {
+                        return new BackendResult(BackendKind.SYSTEM_UI,
+                                BackendStatus.TRANSIENT_TRANSPORT_FAILURE, 0L);
+                    }
                     SystemUiCapability previousCapability = capabilityClassifier.capability();
                     BackendResult result = localSystemUiMethod.forceStop(
                             targetPackage, targetUser, false);
@@ -203,7 +216,8 @@ final class SystemUiRuntime {
                     return result;
                 };
         ForceStopResult result = new ForceStopCoordinator(rootMethod, classifiedSystemUiMethod)
-                .forceStop(plan, packageName, userId);
+                .forceStop(plan, packageName, userId,
+                        android.os.SystemClock::elapsedRealtime, deadline);
         if (result.isSuccess()) {
             recoveryWorker.execute(() -> reportExecution(activeBridge, snapshot, result));
         }
@@ -215,9 +229,9 @@ final class SystemUiRuntime {
             SystemUiConnectionSnapshot snapshot,
             String packageName,
             int userId,
-            boolean waitForConnection) {
+            boolean waitForConnection, long deadline) {
         long startedAt = android.os.SystemClock.elapsedRealtime();
-        if (snapshot.state() != SystemUiBridgeState.READY || activeBridge == null) {
+        if (!isCurrentSession(activeBridge, snapshot)) {
             return rootResult(BackendStatus.TRANSIENT_TRANSPORT_FAILURE, startedAt);
         }
         try {
@@ -227,7 +241,7 @@ final class SystemUiRuntime {
                     snapshot.sessionToken(),
                     packageName,
                     userId,
-                    waitForConnection);
+                    waitForConnection, deadline);
             if (parcel == null) {
                 return rootResult(BackendStatus.TRANSIENT_TRANSPORT_FAILURE, startedAt);
             }
@@ -252,6 +266,15 @@ final class SystemUiRuntime {
         if (activeContext == null || !connection.startBinding()) {
             return;
         }
+        long epoch = ++bindingEpoch;
+        serviceConnection = newServiceConnection(epoch);
+        mainHandler.postDelayed(() -> {
+            SystemUiBridgeState state = connection.snapshot().state();
+            if (bindingEpoch == epoch && (state == SystemUiBridgeState.BINDING
+                    || state == SystemUiBridgeState.REGISTERING)) {
+                handleDisconnected("bind-timeout", true);
+            }
+        }, 5_000L);
         Intent intent = new Intent().setComponent(new ComponentName(
                 MODULE_PACKAGE, ForceStopBridgeService.class.getName()));
         intent.addFlags(Intent.FLAG_INCLUDE_STOPPED_PACKAGES);
@@ -275,27 +298,41 @@ final class SystemUiRuntime {
         }
     }
 
-    private void beginBridgeRegistration(ComponentName name, IBinder service) {
+    private void beginBridgeRegistration(ComponentName name, IBinder service, long epoch) {
         if (!connection.onConnected()) {
             logger.warn("systemui_bridge_stale_connection", "component=" + name);
             return;
         }
-        IForceStopBridge candidate = IForceStopBridge.Stub.asInterface(service);
+        IForceStopBridge candidate = TimedBridge.wrap(
+                IForceStopBridge.Stub.asInterface(service), remoteCalls);
         if (candidate == null) {
             handleDisconnected("missing-interface", true);
             return;
         }
         rootStateFresh = false;
-        recoveryWorker.execute(() -> registerConnectedBridge(name, service, candidate));
+        recoveryWorker.execute(() -> registerConnectedBridge(name, service, candidate, epoch));
     }
 
     private void registerConnectedBridge(
             ComponentName name,
             IBinder service,
-            IForceStopBridge candidate) {
+            IForceStopBridge candidate, long epoch) {
         try {
             SystemUiRegistrationParcel registration = candidate.registerSystemUi(
-                    BridgeProtocol.VERSION, connection.generation(), configurationCallback);
+                    BridgeProtocol.VERSION, connection.generation(), new ISystemUiCallback.Stub() {
+                        @Override public void onConfigurationChanged(BridgeConfigurationParcel parcel) throws RemoteException {
+                            synchronized (SystemUiRuntime.this) {
+                                if (bindingEpoch == epoch) configurationCallback.onConfigurationChanged(parcel);
+                            }
+                        }
+                        @Override public void onRuntimeStateChanged(BridgeRuntimeStateParcel parcel) throws RemoteException {
+                            synchronized (SystemUiRuntime.this) {
+                                if (bindingEpoch == epoch) configurationCallback.onRuntimeStateChanged(parcel);
+                            }
+                        }
+                    });
+            synchronized (this) {
+            if (bindingEpoch != epoch) return;
             BridgeProtocol.Status status = registration == null
                     ? BridgeProtocol.Status.OPERATION_FAILED
                     : protocolStatus(registration.status);
@@ -303,7 +340,7 @@ final class SystemUiRuntime {
                     || !connection.onRegistered(
                             connection.generation(), registration.sessionToken)) {
                 logger.warn("systemui_bridge_registration_rejected", "status=" + status);
-                mainHandler.post(() -> handleDisconnected("registration-rejected", true));
+                mainHandler.post(() -> { if (bindingEpoch == epoch) handleDisconnected("registration-rejected", true); });
                 return;
             }
             if (registration.configuration != null) {
@@ -314,6 +351,7 @@ final class SystemUiRuntime {
                 bridge = candidate;
             }
             reconnectBackoff.reset();
+            }
             reportCapability(
                     candidate, connection.snapshot(), capabilityClassifier.capability());
             refreshRootStateAndFlush(candidate);
@@ -322,7 +360,7 @@ final class SystemUiRuntime {
                     + " newGeneration=" + registration.newGeneration);
         } catch (Throwable failure) {
             logger.error("systemui_bridge_registration_failed", "component=" + name, failure);
-            mainHandler.post(() -> handleDisconnected("registration-failed", true));
+            mainHandler.post(() -> { if (bindingEpoch == epoch) handleDisconnected("registration-failed", true); });
         }
     }
 
@@ -378,11 +416,11 @@ final class SystemUiRuntime {
 
     private RootConnectionState recoveryRootState() {
         SystemUiBridgeState bridgeState = connection.snapshot().state();
-        if (lastRootState.isTerminal()) {
-            return lastRootState;
-        }
         if (bridgeState == SystemUiBridgeState.DISCONNECTED) {
             return RootConnectionState.DISCONNECTED;
+        }
+        if (lastRootState.isTerminal()) {
+            return lastRootState;
         }
         if (bridgeState != SystemUiBridgeState.READY || !rootStateFresh) {
             return RootConnectionState.CONNECTING;
@@ -425,6 +463,7 @@ final class SystemUiRuntime {
                 notifyConnectionFailure(expectedBridge);
                 return;
             }
+            if (!isCurrentSession(expectedBridge, snapshot)) return;
             lastRootState = model.rootState();
             rootStateFresh = true;
             logger.info("recovery_root_state_refreshed", "state=" + model.rootState());
@@ -551,6 +590,7 @@ final class SystemUiRuntime {
         Context activeContext;
         boolean shouldUnbind;
         synchronized (this) {
+            bindingEpoch++;
             bridge = null;
             unlinkDeathRecipientLocked();
             activeContext = context;

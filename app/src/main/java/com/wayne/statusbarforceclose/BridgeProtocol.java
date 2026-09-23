@@ -1,7 +1,7 @@
 package com.wayne.statusbarforceclose;
 
 final class BridgeProtocol {
-    static final int VERSION = 4;
+    static final int VERSION = 5;
 
     private BridgeProtocol() {
     }

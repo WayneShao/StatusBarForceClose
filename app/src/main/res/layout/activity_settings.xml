@@ -131,6 +131,13 @@
             android:textAppearance="@style/TextAppearance.StatusBarForceClose.RowTitle" />
 
         <TextView
+            android:id="@+id/background_actual_status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:textAppearance="@style/TextAppearance.StatusBarForceClose.Body"
+            android:text="@string/protection_unknown" />
+
+        <TextView
             style="@style/Widget.StatusBarForceClose.SectionLabel"
             android:layout_marginTop="24dp"
             android:text="@string/section_system" />

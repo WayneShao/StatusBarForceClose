@@ -121,8 +121,10 @@ if [[ "$diagnostics" == diagnostics-present ]]; then
   grep -aFRq -e 'event=' -e 'double_tap_detected' "$dex_dir" || {
     echo "::error::APK is missing Debug diagnostic messages"; exit 1;
   }
-elif grep -aFRq -e 'event=' -e 'double_tap_detected' "$dex_dir"; then
-  echo "::error::Release APK still contains Debug diagnostic messages"; exit 1
+else
+  grep -aFRq 'health=' "$dex_dir" || {
+    echo "::error::Release APK is missing minimal health diagnostics"; exit 1;
+  }
 fi
 
 printf 'Validated %s (%s, minSdk %s, targetSdk %s)\n' \

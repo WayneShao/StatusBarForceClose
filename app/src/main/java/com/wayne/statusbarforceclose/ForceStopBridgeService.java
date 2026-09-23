@@ -85,7 +85,7 @@ public final class ForceStopBridgeService extends Service {
                 String sessionToken,
                 String packageName,
                 int userId,
-                boolean waitForConnection) {
+                boolean waitForConnection, long deadlineElapsedRealtime) {
             BackendResult result = dispatcher.forceStopRoot(
                     callerIdentity(),
                     protocol,
@@ -93,7 +93,7 @@ public final class ForceStopBridgeService extends Service {
                     sessionToken,
                     packageName,
                     userId,
-                    waitForConnection);
+                    waitForConnection, deadlineElapsedRealtime);
             return BackendResultParcel.fromModel(result);
         }
 
@@ -449,6 +449,7 @@ public final class ForceStopBridgeService extends Service {
 
     private void report(int priority, String event, String details, Throwable throwable) {
         if (!BuildConfig.DIAGNOSTICS_ENABLED) {
+            HealthLog.record(priority, event, throwable);
             return;
         }
         String message = "event=" + event + " " + details;

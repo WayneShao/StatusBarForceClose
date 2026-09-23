@@ -105,7 +105,13 @@ final class LibsuRootBindAdapter implements RootBindAdapter {
 
         @Override
         public boolean forceStop(String packageName, int userId) throws Exception {
-            return delegate.forceStop(packageName, userId);
+            return forceStop(packageName, userId, android.os.SystemClock.elapsedRealtime() + 3_750L);
+        }
+
+        @Override
+        public boolean forceStop(String packageName, int userId, long deadlineElapsedRealtime)
+                throws Exception {
+            return delegate.forceStop(packageName, userId, deadlineElapsedRealtime);
         }
 
         @Override

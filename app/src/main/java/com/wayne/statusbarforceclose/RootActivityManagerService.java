@@ -20,7 +20,11 @@ public final class RootActivityManagerService extends RootService {
     private final IRootActivityController.Stub controller =
             new IRootActivityController.Stub() {
                 @Override
-                public boolean forceStop(String packageName, int userId) {
+                public boolean forceStop(String packageName, int userId, long deadlineElapsedRealtime) {
+                    if (android.os.SystemClock.elapsedRealtime() >= deadlineElapsedRealtime) {
+                        report(Log.WARN, "root_request_expired", "", null);
+                        return false;
+                    }
                     if (packageName == null || packageName.isBlank() || userId < 0) {
                         report(Log.WARN, "root_target_rejected", "package=" + packageName
                                 + " user=" + userId, null);
@@ -32,7 +36,9 @@ public final class RootActivityManagerService extends RootService {
                         report(Log.INFO, "root_force_stop_start", "package=" + packageName
                                 + " user=" + userId + " pid=" + android.os.Process.myPid()
                                 + " uid=" + android.os.Process.myUid(), null);
-                        RootActivityManager.forceStopPackage(packageName, userId);
+                        if (android.os.SystemClock.elapsedRealtime() >= deadlineElapsedRealtime) return false;
+                        if (!RootActivityManager.forceStopPackage(
+                                packageName, userId, deadlineElapsedRealtime)) return false;
                         report(Log.INFO, "root_force_stop_result", "package=" + packageName
                                 + " user=" + userId + " success=true", null);
                         return true;
@@ -112,6 +118,7 @@ public final class RootActivityManagerService extends RootService {
 
     private static void report(int priority, String event, String details, Throwable throwable) {
         if (!BuildConfig.DIAGNOSTICS_ENABLED) {
+            HealthLog.record(priority, event, throwable);
             return;
         }
         String message = "event=" + event + " " + details;
@@ -130,8 +137,10 @@ public final class RootActivityManagerService extends RootService {
         }
 
         @SuppressLint({"PrivateApi", "DiscouragedPrivateApi", "SoonBlockedPrivateApi"})
-        static synchronized void forceStopPackage(String packageName, int userId)
+        static synchronized boolean forceStopPackage(String packageName, int userId,
+                long deadlineElapsedRealtime)
                 throws ReflectiveOperationException {
+            if (android.os.SystemClock.elapsedRealtime() >= deadlineElapsedRealtime) return false;
             if (activityManager == null || forceStopPackage == null) {
                 HiddenApiBypass.addHiddenApiExemptions(
                         "Landroid/os/ServiceManager",
@@ -154,7 +163,9 @@ public final class RootActivityManagerService extends RootService {
                         String.class,
                         int.class);
             }
+            if (android.os.SystemClock.elapsedRealtime() >= deadlineElapsedRealtime) return false;
             forceStopPackage.invoke(activityManager, packageName, userId);
+            return true;
         }
     }
 }

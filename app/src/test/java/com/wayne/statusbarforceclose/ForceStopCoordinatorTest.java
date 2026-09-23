@@ -10,6 +10,28 @@ import org.junit.Test;
 
 public final class ForceStopCoordinatorTest {
     @Test
+    public void timedOutRootMustNotRunLateLocalFallback() {
+        long[] clock = {0};
+        List<BackendKind> calls = new ArrayList<>();
+        ForceStopCoordinator coordinator = new ForceStopCoordinator(
+                (pkg, user, wait) -> {
+                    calls.add(BackendKind.ROOT);
+                    clock[0] = 4000;
+                    return new BackendResult(BackendKind.ROOT,
+                            BackendStatus.TRANSIENT_TRANSPORT_FAILURE, 4000);
+                }, (pkg, user, wait) -> {
+                    calls.add(BackendKind.SYSTEM_UI);
+                    return new BackendResult(BackendKind.SYSTEM_UI, BackendStatus.SUCCESS, 0);
+                });
+        ForceStopResult result = coordinator.forceStop(new ExecutionPlan(List.of(
+                new ExecutionStep(BackendKind.ROOT, true),
+                new ExecutionStep(BackendKind.SYSTEM_UI, false))),
+                "com.example.reader", 0, () -> clock[0], 3750);
+        assertFalse(result.isSuccess());
+        assertEquals(List.of(BackendKind.ROOT), calls);
+    }
+
+    @Test
     public void successfulFirstAttemptStopsThePlan() {
         List<BackendKind> calls = new ArrayList<>();
         ForceStopCoordinator coordinator = coordinator(

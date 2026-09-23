@@ -63,7 +63,16 @@ final class RootConnectionManager implements RootOperations, RootSystemSettings 
     @Override
     public BackendResult forceStop(
             String packageName, int userId, boolean waitForConnection) {
+        return forceStop(packageName, userId, waitForConnection, Long.MAX_VALUE);
+    }
+
+    @Override
+    public BackendResult forceStop(String packageName, int userId,
+            boolean waitForConnection, long deadlineElapsedRealtime) {
         long startedAt = clock.nowMillis();
+        if (startedAt >= deadlineElapsedRealtime) {
+            return result(BackendStatus.TRANSIENT_TRANSPORT_FAILURE, startedAt);
+        }
         if (packageName == null || packageName.isBlank() || userId < 0) {
             return result(BackendStatus.OPERATION_FAILED, startedAt);
         }
@@ -75,7 +84,7 @@ final class RootConnectionManager implements RootOperations, RootSystemSettings 
         if (controller == null) {
             ensureConnection();
             if (waitForConnection) {
-                controller = waitForController();
+                controller = waitForController(deadlineElapsedRealtime);
             }
         }
         synchronized (lock) {
@@ -83,12 +92,12 @@ final class RootConnectionManager implements RootOperations, RootSystemSettings 
                 controller = connectedController;
             }
         }
-        if (controller == null || !controller.isAlive()) {
+        if (controller == null || !controller.isAlive() || clock.nowMillis() >= deadlineElapsedRealtime) {
             return result(BackendStatus.TRANSIENT_TRANSPORT_FAILURE, startedAt);
         }
         try {
             return result(
-                    controller.forceStop(packageName, userId)
+                    controller.forceStop(packageName, userId, deadlineElapsedRealtime)
                             ? BackendStatus.SUCCESS
                             : BackendStatus.OPERATION_FAILED,
                     startedAt);
@@ -193,10 +202,10 @@ final class RootConnectionManager implements RootOperations, RootSystemSettings 
         }
     }
 
-    private RootController waitForController() {
+    private RootController waitForController(long deadlineElapsedRealtime) {
         synchronized (lock) {
             while (stateMachine.state() == RootConnectionState.CONNECTING) {
-                long remaining = stateMachine.deadlineMillis() - clock.nowMillis();
+                long remaining = Math.min(stateMachine.deadlineMillis(), deadlineElapsedRealtime) - clock.nowMillis();
                 if (remaining <= 0L) {
                     break;
                 }

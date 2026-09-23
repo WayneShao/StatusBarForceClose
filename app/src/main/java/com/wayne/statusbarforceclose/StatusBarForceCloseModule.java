@@ -294,6 +294,7 @@ public final class StatusBarForceCloseModule extends XposedModule {
 
     private void report(int priority, String event, String details, Throwable throwable) {
         if (!BuildConfig.DIAGNOSTICS_ENABLED) {
+            HealthLog.record(priority, event, throwable);
             return;
         }
         String message = "event=" + event + " " + details;

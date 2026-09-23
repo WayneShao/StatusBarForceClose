@@ -122,6 +122,7 @@ public final class SettingsActivity extends Activity {
     protected void onResume() {
         super.onResume();
         renderLauncherIconState();
+        renderActualProtection();
     }
 
     @Override
@@ -288,6 +289,7 @@ public final class SettingsActivity extends Activity {
     }
 
     private void renderRuntime(BridgeRuntimeState state) {
+        renderActualProtection();
         if (!started) {
             return;
         }
@@ -309,6 +311,32 @@ public final class SettingsActivity extends Activity {
         renderingSwitch = true;
         backgroundOptimizationSwitch.setChecked(state.backgroundOptimizationEnabled());
         renderingSwitch = false;
+    }
+
+    private void renderActualProtection() {
+        TextView actual = findViewById(R.id.background_actual_status);
+        try {
+            android.os.PowerManager power = getSystemService(android.os.PowerManager.class);
+            android.app.AppOpsManager ops = getSystemService(android.app.AppOpsManager.class);
+            String doze = getString(power.isIgnoringBatteryOptimizations(getPackageName())
+                    ? R.string.protection_yes : R.string.protection_no);
+            int uid = getApplicationInfo().uid;
+            String background = appOpLabel(ops.unsafeCheckOpRawNoThrow(
+                    "android:run_in_background", uid, getPackageName()));
+            String anyBackground = appOpLabel(ops.unsafeCheckOpRawNoThrow(
+                    "android:run_any_in_background", uid, getPackageName()));
+            actual.setText(getString(R.string.protection_actual, doze, background, anyBackground));
+        } catch (RuntimeException failure) {
+            actual.setText(R.string.protection_unknown);
+        }
+    }
+
+    private String appOpLabel(int mode) {
+        return getString(switch (mode) {
+            case android.app.AppOpsManager.MODE_ALLOWED -> R.string.protection_yes;
+            case android.app.AppOpsManager.MODE_DEFAULT -> R.string.protection_default;
+            default -> R.string.protection_no;
+        });
     }
 
     private void renderDisconnected() {

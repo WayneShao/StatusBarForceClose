@@ -5,6 +5,9 @@
 # libsu's root server creates this service from the ComponentName sent by the client process.
 -keep class com.wayne.statusbarforceclose.RootActivityManagerService { *; }
 
+# TimedBridge invokes the AIDL interface through a bounded dynamic proxy.
+-keep,allowoptimization interface com.wayne.statusbarforceclose.IForceStopBridge { *; }
+
 # The platform invokes this callback by its hidden framework method name.
 -keep class com.wayne.statusbarforceclose.TaskStackListenerBridge {
     public void onTaskMovedToFront(android.app.ActivityManager$RunningTaskInfo);

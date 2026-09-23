@@ -30,4 +30,9 @@
     <string name="launcher_icon_write_failed">无法更新桌面图标状态</string>
     <string name="background_settings">后台设置</string>
     <string name="application_settings">应用设置</string>
+    <string name="protection_yes">已允许</string>
+    <string name="protection_no">未允许</string>
+    <string name="protection_default">系统默认</string>
+    <string name="protection_unknown">当前保护状态未核实。Doze 豁免不等于厂商或第三方防冻。</string>
+    <string name="protection_actual">当前 Doze 豁免：%1$s\n后台运行：%2$s · 任意后台运行：%3$s\n开关表示期望启用，以上为系统实际状态；厂商及第三方防冻状态未核实。</string>
 </resources>

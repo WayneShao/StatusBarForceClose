@@ -5,6 +5,11 @@ interface RootOperations {
 
     BackendResult forceStop(String packageName, int userId, boolean waitForConnection);
 
+    default BackendResult forceStop(String packageName, int userId,
+            boolean waitForConnection, long deadlineElapsedRealtime) {
+        return forceStop(packageName, userId, waitForConnection);
+    }
+
     void requestFreshConnection();
 
     void requestRecovery(RecoveryReason reason, long windowId);

@@ -14,9 +14,18 @@ final class ForceStopCoordinator {
     }
 
     ForceStopResult forceStop(ExecutionPlan plan, String packageName, int userId) {
+        return forceStop(plan, packageName, userId, () -> 0L, Long.MAX_VALUE);
+    }
+
+    ForceStopResult forceStop(ExecutionPlan plan, String packageName, int userId,
+            MonotonicClock clock, long deadline) {
         Objects.requireNonNull(plan, "plan");
         BackendResult lastResult = null;
         for (ExecutionStep step : plan.steps()) {
+            if (clock.nowMillis() >= deadline) {
+                return ForceStopResult.from(new BackendResult(step.backend(),
+                        BackendStatus.TRANSIENT_TRANSPORT_FAILURE, 0L));
+            }
             ForceStopMethod method = step.backend() == BackendKind.ROOT
                     ? rootServiceMethod
                     : binderMethod;

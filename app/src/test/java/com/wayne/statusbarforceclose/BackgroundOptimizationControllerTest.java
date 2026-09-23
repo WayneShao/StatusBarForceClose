@@ -11,6 +11,20 @@ import org.junit.Test;
 
 public final class BackgroundOptimizationControllerTest {
     @Test
+    public void activeJournalDoesNotHideDozeWhitelistDrift() {
+        Fixture fixture = fixture(Map.of(OptimizationItem.DOZE_WHITELIST, 0,
+                OptimizationItem.RUN_IN_BACKGROUND, 0,
+                OptimizationItem.RUN_ANY_IN_BACKGROUND, 0));
+        assertTrue(fixture.controller.setEnabled(true));
+        fixture.root.values.put(OptimizationItem.DOZE_WHITELIST, 0);
+        assertTrue(fixture.controller.setEnabled(true));
+        assertEquals(1, fixture.root.value(OptimizationItem.DOZE_WHITELIST));
+        assertEquals(0, fixture.repository.journal.item(
+                OptimizationItem.DOZE_WHITELIST).originalValue());
+        assertEquals(1L, fixture.repository.journal.generation());
+    }
+
+    @Test
     public void enableCapturesOriginalOnceAndAppliesEverySupportedItem() {
         Fixture fixture = fixture(Map.of(
                 OptimizationItem.DOZE_WHITELIST, 0,
